@@ -123,6 +123,13 @@ export function ServiceDetail({ service, distanceMeters, onClose }: Props) {
             <Row label="Source age" value={serviceAgeLabel(service)} />
           </Section>
 
+          <View style={styles.verifyNote}>
+            <Ionicons name="warning-outline" size={14} color={theme.colors.warning} />
+            <Text style={styles.verifyText}>
+              Information may be out of date — call ahead before visiting.
+            </Text>
+          </View>
+
           <Section title="Source">
             <Text style={styles.sourceOrg}>
               {service.source_organisation || service.source_name || service.source_id}
@@ -314,4 +321,16 @@ const styles = StyleSheet.create({
 
   sourceOrg: { ...theme.type.callout, color: theme.colors.text },
   sourceLicense: { ...theme.type.footnote, color: theme.colors.textTertiary, marginTop: 4 },
+  verifyNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: theme.colors.warningMuted,
+    borderRadius: theme.radius.sm,
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+  },
+  verifyText: { ...theme.type.caption, color: '#78350F', flex: 1, fontStyle: 'italic' },
 });

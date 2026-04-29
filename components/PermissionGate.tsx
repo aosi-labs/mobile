@@ -1,7 +1,10 @@
 import * as Haptics from 'expo-haptics';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '../lib/theme';
 import { EmuMascot } from './EmuMascot';
+
+const PRIVACY_URL = 'https://oa-sa.vercel.app/static/privacy.html';
+const TERMS_URL = 'https://oa-sa.vercel.app/static/terms.html';
 
 type Props = {
   onAllow: () => void;
@@ -44,6 +47,17 @@ export function PermissionGate({ onAllow, onSkip, isRequesting }: Props) {
         >
           <Text style={styles.secondaryText}>Browse without location</Text>
         </Pressable>
+        <Text style={styles.legalFooter}>
+          By continuing, you agree to our{' '}
+          <Text style={styles.legalLink} onPress={() => Linking.openURL(TERMS_URL)}>
+            Terms
+          </Text>{' '}
+          and{' '}
+          <Text style={styles.legalLink} onPress={() => Linking.openURL(PRIVACY_URL)}>
+            Privacy Policy
+          </Text>
+          .
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -81,4 +95,12 @@ const styles = StyleSheet.create({
   secondaryBtn: { paddingVertical: 14, alignItems: 'center' },
   secondaryText: { ...theme.type.headline, color: theme.colors.primary },
   pressed: { opacity: 0.7 },
+  legalFooter: {
+    ...theme.type.caption,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    marginTop: theme.spacing.sm,
+    lineHeight: 18,
+  },
+  legalLink: { color: theme.colors.primary, fontWeight: '500' },
 });

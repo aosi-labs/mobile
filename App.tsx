@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import MapView, { Marker, type Region } from 'react-native-maps';
+import { AboutSheet } from './components/AboutSheet';
 import { EmuMark, EmuMascot } from './components/EmuMascot';
 import { IntentStrip, INTENTS } from './components/IntentStrip';
 import { LocationBanner } from './components/LocationBanner';
@@ -52,6 +53,7 @@ export default function App() {
   const [region, setRegion] = useState<Region>(INITIAL_REGION);
   const [selected, setSelected] = useState<Service | null>(null);
   const [selectedDistance, setSelectedDistance] = useState<number | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const showPermissionGate =
     !permissionResolved && location.status === 'idle' && !isLoading;
@@ -184,6 +186,7 @@ export default function App() {
             onViewMode={setViewMode}
             headerTitle={headerTitle}
             subtitle={subtitle ?? null}
+            onInfoPress={() => setAboutOpen(true)}
             mapPanel={
               viewMode === 'map' ? (
                 <View style={styles.mapWrap}>
@@ -267,6 +270,8 @@ export default function App() {
           setSelectedDistance(null);
         }}
       />
+
+      <AboutSheet visible={aboutOpen} onClose={() => setAboutOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -286,6 +291,7 @@ type HeaderProps = {
   headerTitle: string;
   subtitle: string | null;
   mapPanel: React.ReactNode;
+  onInfoPress: () => void;
 };
 
 function Header({
@@ -303,6 +309,7 @@ function Header({
   headerTitle,
   subtitle,
   mapPanel,
+  onInfoPress,
 }: HeaderProps) {
   return (
     <View>
@@ -313,7 +320,18 @@ function Header({
             <ActivityIndicator size="small" color={theme.colors.primary} />
             <Text style={styles.syncText}>{syncProgress.toLocaleString()}</Text>
           </View>
-        ) : null}
+        ) : (
+          <Pressable
+            onPress={() => {
+              void Haptics.selectionAsync();
+              onInfoPress();
+            }}
+            hitSlop={12}
+            style={styles.infoBtn}
+          >
+            <Ionicons name="information-circle-outline" size={26} color={theme.colors.textSecondary} />
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.searchWrap}>
@@ -450,6 +468,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     backgroundColor: theme.colors.primaryMuted,
     borderRadius: theme.radius.pill,
+  },
+  infoBtn: {
+    position: 'absolute',
+    right: theme.spacing.lg,
+    top: theme.spacing.md,
+    padding: 4,
   },
   syncText: { ...theme.type.caption, color: theme.colors.primary, fontWeight: '600' },
 
