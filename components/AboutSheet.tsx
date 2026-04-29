@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Application from 'expo-application';
 import * as Haptics from 'expo-haptics';
 import {
   Linking,
@@ -12,6 +13,12 @@ import {
 } from 'react-native';
 import { theme } from '../lib/theme';
 import { EmuMascot } from './EmuMascot';
+
+const VERSION_LABEL = (() => {
+  const v = Application.nativeApplicationVersion ?? '1.0.0';
+  const b = Application.nativeBuildVersion;
+  return b ? `v${v} (${b})` : `v${v}`;
+})();
 
 const PRIVACY_URL = 'https://oa-sa.vercel.app/static/privacy.html';
 const TERMS_URL = 'https://oa-sa.vercel.app/static/terms.html';
@@ -110,6 +117,7 @@ export function AboutSheet({ visible, onClose }: Props) {
           </View>
 
           <Text style={styles.footer}>Built on Australian government open data</Text>
+          <Text style={styles.versionText}>{VERSION_LABEL}</Text>
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -271,5 +279,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     textAlign: 'center',
     marginTop: theme.spacing.lg,
+  },
+  versionText: {
+    ...theme.type.caption,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    marginTop: 4,
+    fontVariant: ['tabular-nums'],
   },
 });

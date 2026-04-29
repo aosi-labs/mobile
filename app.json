@@ -14,7 +14,7 @@
       "backgroundColor": "#FBF6EE"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "au.org.aosi.app",
       "buildNumber": "1",
       "infoPlist": {
