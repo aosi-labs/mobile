@@ -1,0 +1,62 @@
+import { Platform } from 'react-native';
+
+export const theme = {
+  colors: {
+    bg: '#F2F2F7',
+    surface: '#FFFFFF',
+    surfaceMuted: '#F9FAFB',
+    border: '#E5E7EB',
+    borderStrong: '#D1D5DB',
+    text: '#111827',
+    textSecondary: '#4B5563',
+    textTertiary: '#9CA3AF',
+    primary: '#007AFF',
+    primaryMuted: '#E0F2FE',
+    success: '#10B981',
+    successMuted: '#D1FAE5',
+    warning: '#F59E0B',
+    warningMuted: '#FEF3C7',
+    danger: '#EF4444',
+    dangerMuted: '#FEE2E2',
+  },
+  radius: {
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 20,
+    pill: 999,
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 20,
+    xxl: 24,
+    xxxl: 32,
+  },
+  type: {
+    largeTitle: { fontSize: 34, fontWeight: '700' as const, letterSpacing: -0.4 },
+    title1: { fontSize: 28, fontWeight: '700' as const, letterSpacing: -0.3 },
+    title2: { fontSize: 22, fontWeight: '700' as const, letterSpacing: -0.2 },
+    title3: { fontSize: 20, fontWeight: '600' as const },
+    headline: { fontSize: 17, fontWeight: '600' as const },
+    body: { fontSize: 17, fontWeight: '400' as const },
+    callout: { fontSize: 16, fontWeight: '400' as const },
+    subhead: { fontSize: 15, fontWeight: '400' as const },
+    footnote: { fontSize: 13, fontWeight: '400' as const },
+    caption: { fontSize: 12, fontWeight: '500' as const },
+  },
+  shadow: Platform.select({
+    ios: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+    },
+    android: {
+      elevation: 2,
+    },
+    default: {},
+  }) as object,
+};

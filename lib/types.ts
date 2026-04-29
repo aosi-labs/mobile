@@ -1,0 +1,28 @@
+export type Service = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  address: string;
+  suburb: string;
+  state: string;
+  postcode: string;
+  latitude: number | null;
+  longitude: number | null;
+  phone: string;
+  email: string;
+  website: string;
+  hours: string;
+  eligibility: string;
+  cost: string;
+  source_id: string;
+  source_name: string;
+  source_organisation: string;
+  source_jurisdiction: string;
+  source_license: string;
+  source_url: string;
+  source_date: string;
+  quality: string;
+  location_precision: string;
+  duplicate_of: string;
+};
