@@ -77,7 +77,6 @@ function AppShell() {
     return () => clearTimeout(t);
   }, [searchInput]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [region, setRegion] = useState<Region>(INITIAL_REGION);
   const [selected, setSelected] = useState<Service | null>(null);
   const [selectedDistance, setSelectedDistance] = useState<number | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -136,21 +135,14 @@ function AppShell() {
   }, [filtered, location.coords]);
 
   const mapMarkers = useMemo(() => {
-    if (region.latitudeDelta > 8) return [];
-    const minLat = region.latitude - region.latitudeDelta / 2;
-    const maxLat = region.latitude + region.latitudeDelta / 2;
-    const minLng = region.longitude - region.longitudeDelta / 2;
-    const maxLng = region.longitude + region.longitudeDelta / 2;
-    const inView: Service[] = [];
+    const out: Service[] = [];
     for (const s of filtered) {
       if (s.latitude == null || s.longitude == null) continue;
-      if (s.latitude < minLat || s.latitude > maxLat) continue;
-      if (s.longitude < minLng || s.longitude > maxLng) continue;
-      inView.push(s);
-      if (inView.length >= MAX_MARKERS) break;
+      out.push(s);
+      if (out.length >= MAX_MARKERS) break;
     }
-    return inView;
-  }, [filtered, region]);
+    return out;
+  }, [filtered]);
 
   const mapRegion = useMemo<Region>(() => {
     if (location.coords) {
@@ -220,7 +212,6 @@ function AppShell() {
             style={StyleSheet.absoluteFill}
             initialRegion={mapRegion}
             showsUserLocation={location.status === 'granted'}
-            onRegionChangeComplete={setRegion}
           >
             {mapMarkers.map((s) => (
               <Marker
@@ -245,10 +236,10 @@ function AppShell() {
               />
             ))}
           </MapView>
-          {region.latitudeDelta > 8 ? (
+          {filtered.length > MAX_MARKERS ? (
             <View style={styles.zoomHint}>
-              <Ionicons name="search" size={14} color="#fff" />
-              <Text style={styles.zoomHintText}>Zoom in to show services</Text>
+              <Ionicons name="information-circle" size={14} color="#fff" />
+              <Text style={styles.zoomHintText}>Showing first {MAX_MARKERS} of {filtered.length.toLocaleString()}, refine your search</Text>
             </View>
           ) : null}
         </View>
