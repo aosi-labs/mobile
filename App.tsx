@@ -197,108 +197,109 @@ function AppShell() {
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
 
-      <FlatList
-        data={viewMode === 'list' ? ranked.slice(0, LIST_LIMIT) : []}
-        keyExtractor={(item) => item.service.id}
-        renderItem={({ item }) => (
-          <ServiceCard
-            service={item.service}
-            distanceMeters={item.distance}
-            onPress={() => openDetail(item.service, item.distance)}
-          />
-        )}
-        ListHeaderComponent={
-          <Header
-            query={searchInput}
-            onQuery={setSearchInput}
-            location={location}
-            onLocationPress={onLocationBannerPress}
-            activeIntent={activeIntent}
-            onIntentChange={setActiveIntent}
-            count={filtered.length}
-            isSyncing={isSyncing}
-            syncProgress={syncProgress}
-            viewMode={viewMode}
-            onViewMode={setViewMode}
-            headerTitle={headerTitle}
-            subtitle={subtitle ?? null}
-            onInfoPress={() => setAboutOpen(true)}
-            mapPanel={
-              viewMode === 'map' ? (
-                <View style={styles.mapWrap}>
-                  <MapView
-                    style={StyleSheet.absoluteFill}
-                    initialRegion={mapRegion}
-                    showsUserLocation={location.status === 'granted'}
-                    onRegionChangeComplete={setRegion}
-                  >
-                    {mapMarkers.map((s) => (
-                      <Marker
-                        key={s.id}
-                        coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
-                        title={s.name}
-                        description={s.suburb}
-                        anchor={{ x: 0.5, y: 0.5 }}
-                        tracksViewChanges={false}
-                        onPress={() => {
-                          void Haptics.selectionAsync();
-                          const dist =
-                            location.coords && s.latitude != null && s.longitude != null
-                              ? distanceMetres(
-                                  location.coords.latitude,
-                                  location.coords.longitude,
-                                  s.latitude,
-                                  s.longitude
-                                )
-                              : null;
-                          openDetail(s, dist);
-                        }}
-                      >
-                        <CategoryMarker category={s.category} precision={s.location_precision} />
-                      </Marker>
-                    ))}
-                  </MapView>
-                  {region.latitudeDelta > 8 ? (
-                    <View style={styles.zoomHint}>
-                      <Ionicons name="search" size={14} color="#fff" />
-                      <Text style={styles.zoomHintText}>Zoom in to show services</Text>
-                    </View>
-                  ) : null}
-                </View>
-              ) : null
-            }
-          />
-        }
-        ListEmptyComponent={
-          isLoading ? (
-            <SkeletonList />
-          ) : viewMode === 'map' ? null : (
-            <EmptyState
-              hasError={!!error}
-              hasFilters={!!searchInput || !!activeIntent}
-              onClear={() => {
-                setSearchInput('');
-                setActiveIntent(null);
-              }}
-              onRetry={refresh}
-            />
-          )
-        }
-        ListFooterComponent={
-          viewMode === 'list' && ranked.length > LIST_LIMIT ? (
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                Showing first {LIST_LIMIT} of {ranked.length.toLocaleString()} — refine your search
-              </Text>
-            </View>
-          ) : (
-            <View style={{ height: 24 }} />
-          )
-        }
-        refreshControl={<RefreshControl refreshing={isSyncing} onRefresh={refresh} tintColor={theme.colors.primary} />}
-        contentContainerStyle={{ paddingBottom: 32 }}
-        showsVerticalScrollIndicator={false}
+      <Header
+        query={searchInput}
+        onQuery={setSearchInput}
+        location={location}
+        onLocationPress={onLocationBannerPress}
+        activeIntent={activeIntent}
+        onIntentChange={setActiveIntent}
+        count={filtered.length}
+        isSyncing={isSyncing}
+        syncProgress={syncProgress}
+        viewMode={viewMode}
+        onViewMode={setViewMode}
+        headerTitle={headerTitle}
+        subtitle={subtitle ?? null}
+        onInfoPress={() => setAboutOpen(true)}
       />
+
+      {viewMode === 'map' ? (
+        <View style={styles.mapBody}>
+          <MapView
+            style={StyleSheet.absoluteFill}
+            initialRegion={mapRegion}
+            showsUserLocation={location.status === 'granted'}
+            onRegionChangeComplete={setRegion}
+          >
+            {mapMarkers.map((s) => (
+              <Marker
+                key={s.id}
+                coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
+                title={s.name}
+                description={s.suburb}
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  const dist =
+                    location.coords && s.latitude != null && s.longitude != null
+                      ? distanceMetres(
+                          location.coords.latitude,
+                          location.coords.longitude,
+                          s.latitude,
+                          s.longitude
+                        )
+                      : null;
+                  openDetail(s, dist);
+                }}
+              >
+                <CategoryMarker category={s.category} precision={s.location_precision} />
+              </Marker>
+            ))}
+          </MapView>
+          {region.latitudeDelta > 8 ? (
+            <View style={styles.zoomHint}>
+              <Ionicons name="search" size={14} color="#fff" />
+              <Text style={styles.zoomHintText}>Zoom in to show services</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <FlatList
+          style={styles.listBody}
+          data={ranked.slice(0, LIST_LIMIT)}
+          keyExtractor={(item) => item.service.id}
+          renderItem={({ item }) => (
+            <ServiceCard
+              service={item.service}
+              distanceMeters={item.distance}
+              onPress={() => openDetail(item.service, item.distance)}
+            />
+          )}
+          ListEmptyComponent={
+            isLoading ? (
+              <SkeletonList />
+            ) : (
+              <EmptyState
+                hasError={!!error}
+                hasFilters={!!searchInput || !!activeIntent}
+                onClear={() => {
+                  setSearchInput('');
+                  setActiveIntent(null);
+                }}
+                onRetry={refresh}
+              />
+            )
+          }
+          ListFooterComponent={
+            ranked.length > LIST_LIMIT ? (
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>
+                  Showing first {LIST_LIMIT} of {ranked.length.toLocaleString()}, refine your search.
+                </Text>
+              </View>
+            ) : (
+              <View style={{ height: 24 }} />
+            )
+          }
+          refreshControl={<RefreshControl refreshing={isSyncing} onRefresh={refresh} tintColor={theme.colors.primary} />}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        />
+      )}
 
       <ServiceDetailSheet
         ref={detailRef}
@@ -326,7 +327,6 @@ type HeaderProps = {
   onViewMode: (m: ViewMode) => void;
   headerTitle: string;
   subtitle: string | null;
-  mapPanel: React.ReactNode;
   onInfoPress: () => void;
 };
 
@@ -344,11 +344,10 @@ function Header({
   onViewMode,
   headerTitle,
   subtitle,
-  mapPanel,
   onInfoPress,
 }: HeaderProps) {
   return (
-    <View>
+    <View style={styles.headerContainer}>
       <View style={styles.topBar}>
         <EmuMark size={44} />
         {isSyncing ? (
@@ -422,8 +421,6 @@ function Header({
           />
         </View>
       </View>
-
-      {mapPanel}
     </View>
   );
 }
@@ -551,15 +548,15 @@ const styles = StyleSheet.create({
   toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: theme.radius.sm - 2 },
   toggleBtnActive: { backgroundColor: theme.colors.primary },
 
-  mapWrap: {
-    height: 360,
-    marginHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    overflow: 'hidden',
-    backgroundColor: theme.colors.surface,
-    ...theme.shadow,
+  headerContainer: {
+    backgroundColor: theme.colors.bg,
+    paddingBottom: theme.spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.border,
   },
+  mapBody: { flex: 1, position: 'relative' },
+  listBody: { flex: 1 },
+  listContent: { paddingTop: theme.spacing.sm, paddingBottom: 32 },
   zoomHint: {
     position: 'absolute',
     top: 16,
