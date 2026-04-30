@@ -1,34 +1,51 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
+import type { LocationSource } from '../hooks/useUserLocation';
 import { theme } from '../lib/theme';
 import { PressableScale } from './PressableScale';
 
 type Props = {
-  hasLocation: boolean;
+  source: LocationSource | null;
   placeLabel: string | null;
+  postcode: string | null;
   onPress: () => void;
 };
 
-export function LocationBanner({ hasLocation, placeLabel, onPress }: Props) {
+export function LocationBanner({ source, placeLabel, postcode, onPress }: Props) {
+  const hasLocation = source !== null;
+  const iconName = source === 'gps' ? 'navigate' : source === 'postcode' ? 'location' : 'globe-outline';
+  const label =
+    source === 'gps' ? 'Near you'
+    : source === 'postcode' ? `Near ${postcode}`
+    : 'Anywhere in Australia';
+  const value =
+    source === 'gps' ? (placeLabel || 'Using your location')
+    : source === 'postcode' ? (placeLabel || 'Using your postcode')
+    : 'Tap to set your location';
+  const a11yLabel =
+    source === 'gps' ? `Near you, ${placeLabel ?? 'using your location'}`
+    : source === 'postcode' ? `Near postcode ${postcode}, ${placeLabel ?? ''}`
+    : 'Anywhere in Australia. Tap to set your location.';
+
   return (
     <PressableScale
       onPress={onPress}
       style={styles.banner}
       accessibilityRole="button"
-      accessibilityLabel={hasLocation ? `Near you, ${placeLabel ?? 'using your location'}` : 'Anywhere in Australia. Tap to use your location.'}
-      accessibilityHint={hasLocation ? 'Tap to stop using your location' : 'Tap to grant location access'}
+      accessibilityLabel={a11yLabel}
+      accessibilityHint="Tap to change location settings"
     >
       <View style={[styles.iconWrap, hasLocation ? styles.iconActive : styles.iconIdle]}>
         <Ionicons
-          name={hasLocation ? 'navigate' : 'globe-outline'}
+          name={iconName}
           size={14}
           color={hasLocation ? '#fff' : theme.colors.textSecondary}
         />
       </View>
       <View style={styles.text}>
-        <Text style={styles.label}>{hasLocation ? 'Near you' : 'Anywhere in Australia'}</Text>
+        <Text style={styles.label}>{label}</Text>
         <Text style={styles.value} numberOfLines={1}>
-          {hasLocation ? placeLabel || 'Using your location' : 'Tap to use your location'}
+          {value}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Linking, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '../lib/theme';
@@ -8,11 +9,12 @@ const TERMS_URL = 'https://oa-sa.vercel.app/static/terms.html';
 
 type Props = {
   onAllow: () => void;
+  onPostcode: () => void;
   onSkip: () => void;
   isRequesting?: boolean;
 };
 
-export function PermissionGate({ onAllow, onSkip, isRequesting }: Props) {
+export function PermissionGate({ onAllow, onPostcode, onSkip, isRequesting }: Props) {
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.content}>
@@ -21,7 +23,7 @@ export function PermissionGate({ onAllow, onSkip, isRequesting }: Props) {
         </View>
         <Text style={styles.title}>G'day. Let's find help nearby.</Text>
         <Text style={styles.body}>
-          AOSI shows support services close to you — food relief, housing, mental health, and more across Australia.
+          AOSI shows support services close to you, including food relief, housing, mental health, and more across Australia.
         </Text>
         <Text style={styles.privacy}>
           Your location stays on your device. Nothing is tracked or shared.
@@ -39,7 +41,20 @@ export function PermissionGate({ onAllow, onSkip, isRequesting }: Props) {
           accessibilityLabel={isRequesting ? 'Requesting location permission' : 'Use my location'}
           accessibilityState={{ disabled: !!isRequesting, busy: !!isRequesting }}
         >
+          <Ionicons name="navigate" size={18} color="#fff" />
           <Text style={styles.primaryText}>{isRequesting ? 'Requesting…' : 'Use my location'}</Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.altBtn, pressed && styles.pressed]}
+          onPress={() => {
+            void Haptics.selectionAsync();
+            onPostcode();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Use my postcode instead"
+        >
+          <Ionicons name="location-outline" size={18} color={theme.colors.primary} />
+          <Text style={styles.altText}>Use my postcode instead</Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
@@ -89,16 +104,29 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   privacy: { ...theme.type.footnote, color: theme.colors.textTertiary, textAlign: 'center' },
-  actions: { padding: theme.spacing.xl, gap: theme.spacing.md },
+  actions: { padding: theme.spacing.xl, gap: theme.spacing.sm },
   primaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     backgroundColor: theme.colors.primary,
     paddingVertical: 14,
     borderRadius: theme.radius.md,
-    alignItems: 'center',
   },
   primaryText: { ...theme.type.headline, color: '#fff' },
-  secondaryBtn: { paddingVertical: 14, alignItems: 'center' },
-  secondaryText: { ...theme.type.headline, color: theme.colors.primary },
+  altBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.primaryMuted,
+    paddingVertical: 14,
+    borderRadius: theme.radius.md,
+  },
+  altText: { ...theme.type.headline, color: theme.colors.primary },
+  secondaryBtn: { paddingVertical: 12, alignItems: 'center' },
+  secondaryText: { ...theme.type.callout, color: theme.colors.textSecondary },
   pressed: { opacity: 0.7 },
   legalFooter: {
     ...theme.type.caption,

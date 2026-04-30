@@ -28,9 +28,10 @@ const GITHUB_URL = 'https://github.com/oa-sa/iOS';
 type Props = {
   visible: boolean;
   onClose: () => void;
+  onChangeLocation: () => void;
 };
 
-export function AboutSheet({ visible, onClose }: Props) {
+export function AboutSheet({ visible, onClose, onChangeLocation }: Props) {
   const open = (url: string) => {
     void Haptics.selectionAsync();
     void Linking.openURL(url);
@@ -97,6 +98,23 @@ export function AboutSheet({ visible, onClose }: Props) {
             <Bullet>Your location stays on your device — we never send it anywhere.</Bullet>
           </Section>
 
+          <Section title="Location">
+            <Pressable
+              onPress={() => {
+                void Haptics.selectionAsync();
+                onChangeLocation();
+              }}
+              style={({ pressed }) => [styles.locationRow, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Change location"
+              accessibilityHint="Switch between GPS, postcode, or no location"
+            >
+              <Ionicons name="location-outline" size={18} color={theme.colors.primary} />
+              <Text style={styles.locationText}>Change location</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
+            </Pressable>
+          </Section>
+
           <Section title="Crisis lines">
             <Text style={styles.bodyText}>
               If you're in immediate danger or need urgent help right now:
@@ -115,6 +133,20 @@ export function AboutSheet({ visible, onClose }: Props) {
             <LinkBtn icon="reader-outline" label="Terms" onPress={() => open(TERMS_URL)} />
             <LinkBtn icon="globe-outline" label="Website" onPress={() => open(SITE_URL)} />
           </View>
+
+          <Section title="Data attribution">
+            <Text style={styles.attributionLine}>Service data: Australian government open data registers and OpenStreetMap.</Text>
+            <Text style={styles.attributionLine}>
+              Australian postcode centroids:{' '}
+              <Text
+                style={styles.attributionLink}
+                onPress={() => open('https://www.matthewproctor.com/full_australian_postcodes')}
+              >
+                Matthew Proctor
+              </Text>
+              {' '}(CC-BY 4.0).
+            </Text>
+          </Section>
 
           <Text style={styles.footer}>Built on Australian government open data</Text>
           <Text style={styles.versionText}>{VERSION_LABEL}</Text>
@@ -294,4 +326,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontVariant: ['tabular-nums'],
   },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: 12,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.primaryMuted,
+    borderRadius: theme.radius.md,
+  },
+  locationText: { ...theme.type.headline, color: theme.colors.primary, flex: 1 },
+  attributionLine: { ...theme.type.footnote, color: theme.colors.textSecondary, lineHeight: 18, marginBottom: 6 },
+  attributionLink: { color: theme.colors.primary, fontWeight: '500' },
 });

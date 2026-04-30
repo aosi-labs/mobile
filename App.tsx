@@ -4,9 +4,10 @@ import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
-  Alert,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -31,6 +32,7 @@ import { EmuMark, EmuMascot } from './components/EmuMascot';
 import { IntentStrip, INTENTS } from './components/IntentStrip';
 import { LocationBanner } from './components/LocationBanner';
 import { PermissionGate } from './components/PermissionGate';
+import { PostcodeInput } from './components/PostcodeInput';
 import { ServiceCard } from './components/ServiceCard';
 import { ServiceDetailSheet, type ServiceDetailHandle } from './components/ServiceDetail';
 import { SkeletonList } from './components/SkeletonList';
@@ -80,6 +82,7 @@ function AppShell() {
   const [selected, setSelected] = useState<Service | null>(null);
   const [selectedDistance, setSelectedDistance] = useState<number | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [postcodeOpen, setPostcodeOpen] = useState(false);
   const detailRef = useRef<ServiceDetailHandle>(null);
 
   const openDetail = useCallback((service: Service, distance: number | null) => {
@@ -95,6 +98,7 @@ function AppShell() {
 
   const showPermissionGate =
     !permissionResolved && location.status === 'idle' && !isLoading;
+  const isHydrating = location.status === 'hydrating';
 
   const intentCategory = useMemo(
     () => INTENTS.find((i) => i.key === activeIntent)?.category ?? null,
@@ -156,31 +160,57 @@ function AppShell() {
     return INITIAL_REGION;
   }, [location.coords]);
 
+  if (isHydrating) {
+    return (
+      <SafeAreaView style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={theme.colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
   if (showPermissionGate) {
     return (
-      <PermissionGate
-        isRequesting={location.status === 'requesting'}
-        onAllow={async () => {
-          await location.request();
-          setPermissionResolved(true);
-        }}
-        onSkip={() => setPermissionResolved(true)}
-      />
+      <>
+        <PermissionGate
+          isRequesting={location.status === 'requesting'}
+          onAllow={async () => {
+            await location.request();
+            setPermissionResolved(true);
+          }}
+          onPostcode={() => setPostcodeOpen(true)}
+          onSkip={() => setPermissionResolved(true)}
+        />
+        <PostcodeInput
+          visible={postcodeOpen}
+          initialValue={location.postcode ?? ''}
+          onCancel={() => setPostcodeOpen(false)}
+          onConfirm={(entry) => {
+            location.setPostcode(entry.postcode);
+            setPostcodeOpen(false);
+            setPermissionResolved(true);
+          }}
+        />
+      </>
     );
   }
 
   const onLocationBannerPress = () => {
-    if (location.status === 'granted') {
-      Alert.alert('Stop using your location?', 'Switch back to browsing all of Australia.', [
-        { text: 'Keep using', style: 'cancel' },
-        { text: 'Stop', style: 'destructive', onPress: () => location.clear() },
-      ]);
-    } else {
-      void location.request();
-    }
+    showLocationActionSheet({
+      source: location.source,
+      onUseGps: () => {
+        void location.request();
+      },
+      onUsePostcode: () => setPostcodeOpen(true),
+      onClear: () => {
+        void location.clear();
+      },
+    });
   };
 
-  const headerTitle = location.coords ? 'Near you' : 'All services';
+  const headerTitle =
+    location.source === 'gps' ? 'Near you'
+    : location.source === 'postcode' ? `Near ${location.postcode}`
+    : 'All services';
   const subtitle = activeIntent
     ? INTENTS.find((i) => i.key === activeIntent)?.label
     : null;
@@ -296,9 +326,68 @@ function AppShell() {
         onDismiss={handleDetailDismiss}
       />
 
-      <AboutSheet visible={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <AboutSheet
+        visible={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        onChangeLocation={() => {
+          setAboutOpen(false);
+          // Defer until the about sheet finishes dismissing so the postcode
+          // modal slides in cleanly on top.
+          setTimeout(() => onLocationBannerPress(), 250);
+        }}
+      />
+
+      <PostcodeInput
+        visible={postcodeOpen}
+        initialValue={location.postcode ?? ''}
+        onCancel={() => setPostcodeOpen(false)}
+        onConfirm={(entry) => {
+          location.setPostcode(entry.postcode);
+          setPostcodeOpen(false);
+        }}
+      />
     </SafeAreaView>
   );
+}
+
+function showLocationActionSheet(opts: {
+  source: 'gps' | 'postcode' | null;
+  onUseGps: () => void;
+  onUsePostcode: () => void;
+  onClear: () => void;
+}) {
+  const { source, onUseGps, onUsePostcode, onClear } = opts;
+
+  // Build the option list dynamically based on what's currently active.
+  const options: { label: string; action: () => void; destructive?: boolean }[] = [];
+  if (source !== 'gps') options.push({ label: 'Use my location (GPS)', action: onUseGps });
+  if (source !== 'postcode') options.push({ label: source ? 'Use a postcode instead' : 'Use my postcode', action: onUsePostcode });
+  if (source === 'postcode') options.push({ label: 'Change postcode', action: onUsePostcode });
+  if (source) options.push({ label: 'Clear location', action: onClear, destructive: true });
+
+  const labels = [...options.map((o) => o.label), 'Cancel'];
+  const cancelButtonIndex = labels.length - 1;
+  const destructiveButtonIndex = options.findIndex((o) => o.destructive);
+
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options: labels,
+        cancelButtonIndex,
+        destructiveButtonIndex: destructiveButtonIndex === -1 ? undefined : destructiveButtonIndex,
+        title: 'Location',
+      },
+      (index) => {
+        if (index === cancelButtonIndex || index === undefined) return;
+        options[index]?.action();
+      },
+    );
+    return;
+  }
+
+  // Android fallback: just trigger the most relevant action directly.
+  if (source === null) onUsePostcode();
+  else onClear();
 }
 
 type HeaderProps = {
@@ -375,8 +464,9 @@ function Header({
       </View>
 
       <LocationBanner
-        hasLocation={location.status === 'granted'}
+        source={location.source}
         placeLabel={location.placeLabel}
+        postcode={location.postcode}
         onPress={onLocationPress}
       />
 
