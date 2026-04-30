@@ -1,30 +1,69 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import {
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from '@gorhom/bottom-sheet';
+import * as Haptics from 'expo-haptics';
+import { forwardRef, useMemo } from 'react';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { catColor, catLabel } from '../lib/constants';
 import { formatDistance } from '../lib/geo';
 import { locationLabel, qualityLabel, readiness, serviceAgeLabel } from '../lib/readiness';
 import { theme } from '../lib/theme';
 import type { Service } from '../lib/types';
 
+export type ServiceDetailHandle = BottomSheetModal;
+
 type Props = {
   service: Service | null;
   distanceMeters?: number | null;
-  onClose: () => void;
+  onDismiss: () => void;
 };
 
-export function ServiceDetail({ service, distanceMeters, onClose }: Props) {
-  if (!service) return null;
+const SNAP_POINTS = ['42%', '92%'];
+
+export const ServiceDetailSheet = forwardRef<ServiceDetailHandle, Props>(function ServiceDetailSheet(
+  { service, distanceMeters, onDismiss },
+  ref,
+) {
+  const snapPoints = useMemo(() => SNAP_POINTS, []);
+
+  const renderBackdrop = useMemo(
+    () =>
+      function Backdrop(props: BottomSheetBackdropProps) {
+        return (
+          <BottomSheetBackdrop
+            {...props}
+            appearsOnIndex={0}
+            disappearsOnIndex={-1}
+            opacity={0.45}
+            pressBehavior="close"
+          />
+        );
+      },
+    [],
+  );
+
+  return (
+    <BottomSheetModal
+      ref={ref}
+      snapPoints={snapPoints}
+      onDismiss={onDismiss}
+      enableDynamicSizing={false}
+      backdropComponent={renderBackdrop}
+      handleIndicatorStyle={styles.handleIndicator}
+      backgroundStyle={styles.sheetBg}
+      enableContentPanningGesture
+      enableHandlePanningGesture
+    >
+      {service ? <ServiceDetailContent service={service} distanceMeters={distanceMeters} /> : null}
+    </BottomSheetModal>
+  );
+});
+
+function ServiceDetailContent({ service, distanceMeters }: { service: Service; distanceMeters?: number | null }) {
   const r = readiness(service);
   const color = catColor(service.category);
   const directionsUrl =
@@ -40,109 +79,84 @@ export function ServiceDetail({ service, distanceMeters, onClose }: Props) {
   };
 
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={styles.root}>
-        <View style={styles.header}>
-          <View style={styles.handleBar} />
-          <Pressable
-            onPress={() => {
-              void Haptics.selectionAsync();
-              onClose();
-            }}
-            hitSlop={16}
-            style={styles.closeBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-          >
-            <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
-          </Pressable>
+    <BottomSheetScrollView contentContainerStyle={styles.body}>
+      <View style={[styles.heroIcon, { backgroundColor: color + '1A' }]}>
+        <Ionicons name="business-outline" size={28} color={color} />
+      </View>
+      <Text style={styles.name}>{service.name}</Text>
+      <View style={styles.badges}>
+        <View style={[styles.badge, { backgroundColor: color }]}>
+          <Text style={styles.badgeText}>{catLabel(service.category)}</Text>
         </View>
-        <ScrollView contentContainerStyle={styles.body}>
-          <View style={[styles.heroIcon, { backgroundColor: color + '1A' }]}>
-            <Ionicons name="business-outline" size={28} color={color} />
+        <View style={[styles.readyBadge, readyBg(r.key)]}>
+          <View style={[styles.dot, readyDot(r.key)]} />
+          <Text style={[styles.readyText, readyColor(r.key)]}>{r.label}</Text>
+        </View>
+        {distanceMeters != null ? (
+          <View style={styles.distChip}>
+            <Ionicons name="navigate-outline" size={12} color={theme.colors.primary} />
+            <Text style={styles.distText}>{formatDistance(distanceMeters)} away</Text>
           </View>
-          <Text style={styles.name}>{service.name}</Text>
-          <View style={styles.badges}>
-            <View style={[styles.badge, { backgroundColor: color }]}>
-              <Text style={styles.badgeText}>{catLabel(service.category)}</Text>
-            </View>
-            <View style={[styles.readyBadge, readyBg(r.key)]}>
-              <View style={[styles.dot, readyDot(r.key)]} />
-              <Text style={[styles.readyText, readyColor(r.key)]}>{r.label}</Text>
-            </View>
-            {distanceMeters != null ? (
-              <View style={styles.distChip}>
-                <Ionicons name="navigate-outline" size={12} color={theme.colors.primary} />
-                <Text style={styles.distText}>{formatDistance(distanceMeters)} away</Text>
-              </View>
-            ) : null}
-          </View>
+        ) : null}
+      </View>
 
-          {service.description ? <Text style={styles.desc}>{service.description}</Text> : null}
+      {service.description ? <Text style={styles.desc}>{service.description}</Text> : null}
 
-          <View style={styles.actions}>
-            {service.phone ? (
-              <ActionButton
-                icon="call"
-                label="Call"
-                primary
-                onPress={() => open(`tel:${service.phone}`)}
-              />
-            ) : null}
-            {directionsUrl ? (
-              <ActionButton icon="navigate" label="Directions" onPress={() => open(directionsUrl)} />
-            ) : null}
-            {service.website ? (
-              <ActionButton icon="globe" label="Website" onPress={() => open(service.website)} />
-            ) : null}
-            {service.email ? (
-              <ActionButton icon="mail" label="Email" onPress={() => open(`mailto:${service.email}`)} />
-            ) : null}
-          </View>
+      <View style={styles.actions}>
+        {service.phone ? (
+          <ActionButton icon="call" label="Call" primary onPress={() => open(`tel:${service.phone}`)} />
+        ) : null}
+        {directionsUrl ? (
+          <ActionButton icon="navigate" label="Directions" onPress={() => open(directionsUrl)} />
+        ) : null}
+        {service.website ? (
+          <ActionButton icon="globe" label="Website" onPress={() => open(service.website)} />
+        ) : null}
+        {service.email ? (
+          <ActionButton icon="mail" label="Email" onPress={() => open(`mailto:${service.email}`)} />
+        ) : null}
+      </View>
 
-          <Section title="Location">
-            <Field
-              icon="location-outline"
-              value={
-                [service.address, service.suburb, service.state, service.postcode]
-                  .filter(Boolean)
-                  .join(', ') || 'Location not provided'
-              }
-            />
-          </Section>
+      <Section title="Location">
+        <Field
+          icon="location-outline"
+          value={
+            [service.address, service.suburb, service.state, service.postcode].filter(Boolean).join(', ') ||
+            'Location not provided'
+          }
+        />
+      </Section>
 
-          {(service.hours || service.eligibility || service.cost) && (
-            <Section title="About this service">
-              <Field icon="time-outline" label="Hours" value={service.hours} />
-              <Field icon="people-outline" label="Who can use it" value={service.eligibility} />
-              <Field icon="cash-outline" label="Cost" value={service.cost} />
-            </Section>
-          )}
+      {(service.hours || service.eligibility || service.cost) && (
+        <Section title="About this service">
+          <Field icon="time-outline" label="Hours" value={service.hours} />
+          <Field icon="people-outline" label="Who can use it" value={service.eligibility} />
+          <Field icon="cash-outline" label="Cost" value={service.cost} />
+        </Section>
+      )}
 
-          <Section title="Data quality">
-            <Row label="Record" value={qualityLabel(service.quality)} />
-            <Row label="Location" value={locationLabel(service)} />
-            <Row label="Source age" value={serviceAgeLabel(service)} />
-          </Section>
+      <Section title="Data quality">
+        <Row label="Record" value={qualityLabel(service.quality)} />
+        <Row label="Location" value={locationLabel(service)} />
+        <Row label="Source age" value={serviceAgeLabel(service)} />
+      </Section>
 
-          <View style={styles.verifyNote}>
-            <Ionicons name="warning-outline" size={14} color={theme.colors.warning} />
-            <Text style={styles.verifyText}>
-              Information may be out of date — call ahead before visiting.
-            </Text>
-          </View>
+      <View style={styles.verifyNote}>
+        <Ionicons name="warning-outline" size={14} color={theme.colors.warning} />
+        <Text style={styles.verifyText}>
+          Information may be out of date. Call ahead before visiting.
+        </Text>
+      </View>
 
-          <Section title="Source">
-            <Text style={styles.sourceOrg}>
-              {service.source_organisation || service.source_name || service.source_id}
-            </Text>
-            {service.source_license ? (
-              <Text style={styles.sourceLicense}>License · {service.source_license}</Text>
-            ) : null}
-          </Section>
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
+      <Section title="Source">
+        <Text style={styles.sourceOrg}>
+          {service.source_organisation || service.source_name || service.source_id}
+        </Text>
+        {service.source_license ? (
+          <Text style={styles.sourceLicense}>License · {service.source_license}</Text>
+        ) : null}
+      </Section>
+    </BottomSheetScrollView>
   );
 }
 
@@ -152,7 +166,7 @@ function ActionButton({
   onPress,
   primary,
 }: {
-  icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   primary?: boolean;
@@ -190,7 +204,7 @@ function Field({
   label,
   value,
 }: {
-  icon: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
+  icon: keyof typeof Ionicons.glyphMap;
   label?: string;
   value?: string;
 }) {
@@ -231,28 +245,10 @@ function readyDot(k: 'ready' | 'verify' | 'low') {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.colors.surface },
-  header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
-  handleBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.colors.border,
-    alignSelf: 'center',
-    marginBottom: theme.spacing.sm,
-  },
-  closeBtn: {
-    position: 'absolute',
-    right: theme.spacing.lg,
-    top: theme.spacing.sm,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: theme.colors.surfaceMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  body: { paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxxl },
+  sheetBg: { backgroundColor: theme.colors.surface, borderTopLeftRadius: theme.radius.xl, borderTopRightRadius: theme.radius.xl },
+  handleIndicator: { backgroundColor: theme.colors.borderStrong, width: 36, height: 4 },
+
+  body: { paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxxl, paddingTop: theme.spacing.sm },
   heroIcon: {
     width: 56,
     height: 56,
@@ -325,6 +321,7 @@ const styles = StyleSheet.create({
 
   sourceOrg: { ...theme.type.callout, color: theme.colors.text },
   sourceLicense: { ...theme.type.footnote, color: theme.colors.textTertiary, marginTop: 4 },
+
   verifyNote: {
     flexDirection: 'row',
     alignItems: 'center',

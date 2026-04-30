@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider, type BottomSheetModal } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -33,7 +33,7 @@ import { IntentStrip, INTENTS } from './components/IntentStrip';
 import { LocationBanner } from './components/LocationBanner';
 import { PermissionGate } from './components/PermissionGate';
 import { ServiceCard } from './components/ServiceCard';
-import { ServiceDetail } from './components/ServiceDetail';
+import { ServiceDetailSheet, type ServiceDetailHandle } from './components/ServiceDetail';
 import { SkeletonList } from './components/SkeletonList';
 import { useServices } from './hooks/useServices';
 import { useUserLocation } from './hooks/useUserLocation';
@@ -81,6 +81,18 @@ function AppShell() {
   const [selected, setSelected] = useState<Service | null>(null);
   const [selectedDistance, setSelectedDistance] = useState<number | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const detailRef = useRef<ServiceDetailHandle>(null);
+
+  const openDetail = useCallback((service: Service, distance: number | null) => {
+    setSelected(service);
+    setSelectedDistance(distance);
+    detailRef.current?.present();
+  }, []);
+
+  const handleDetailDismiss = useCallback(() => {
+    setSelected(null);
+    setSelectedDistance(null);
+  }, []);
 
   const showPermissionGate =
     !permissionResolved && location.status === 'idle' && !isLoading;
@@ -192,10 +204,7 @@ function AppShell() {
           <ServiceCard
             service={item.service}
             distanceMeters={item.distance}
-            onPress={() => {
-              setSelected(item.service);
-              setSelectedDistance(item.distance);
-            }}
+            onPress={() => openDetail(item.service, item.distance)}
           />
         )}
         ListHeaderComponent={
@@ -242,8 +251,7 @@ function AppShell() {
                                   s.longitude
                                 )
                               : null;
-                          setSelected(s);
-                          setSelectedDistance(dist);
+                          openDetail(s, dist);
                         }}
                       >
                         <CategoryMarker category={s.category} precision={s.location_precision} />
@@ -292,13 +300,11 @@ function AppShell() {
         showsVerticalScrollIndicator={false}
       />
 
-      <ServiceDetail
+      <ServiceDetailSheet
+        ref={detailRef}
         service={selected}
         distanceMeters={selectedDistance}
-        onClose={() => {
-          setSelected(null);
-          setSelectedDistance(null);
-        }}
+        onDismiss={handleDetailDismiss}
       />
 
       <AboutSheet visible={aboutOpen} onClose={() => setAboutOpen(false)} />
