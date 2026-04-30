@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
@@ -14,6 +15,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import MapView, { Marker, type Region } from 'react-native-maps';
 import { AboutSheet } from './components/AboutSheet';
 import { EmuMark, EmuMascot } from './components/EmuMascot';
@@ -43,6 +45,16 @@ const LIST_LIMIT = 200;
 type ViewMode = 'list' | 'map';
 
 export default function App() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <BottomSheetModalProvider>
+        <AppShell />
+      </BottomSheetModalProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+function AppShell() {
   const { services, isLoading, isSyncing, syncProgress, error, refresh } = useServices();
   const location = useUserLocation();
 
