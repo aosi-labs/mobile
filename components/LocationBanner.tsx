@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../lib/theme';
+import { PressableScale } from './PressableScale';
 
 type Props = {
   hasLocation: boolean;
@@ -11,12 +11,12 @@ type Props = {
 
 export function LocationBanner({ hasLocation, placeLabel, onPress }: Props) {
   return (
-    <Pressable
-      onPress={() => {
-        void Haptics.selectionAsync();
-        onPress();
-      }}
-      style={({ pressed }) => [styles.banner, pressed && styles.pressed]}
+    <PressableScale
+      onPress={onPress}
+      style={styles.banner}
+      accessibilityRole="button"
+      accessibilityLabel={hasLocation ? `Near you, ${placeLabel ?? 'using your location'}` : 'Anywhere in Australia. Tap to use your location.'}
+      accessibilityHint={hasLocation ? 'Tap to stop using your location' : 'Tap to grant location access'}
     >
       <View style={[styles.iconWrap, hasLocation ? styles.iconActive : styles.iconIdle]}>
         <Ionicons
@@ -32,7 +32,7 @@ export function LocationBanner({ hasLocation, placeLabel, onPress }: Props) {
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -49,7 +49,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     ...theme.shadow,
   },
-  pressed: { opacity: 0.7 },
   iconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   iconActive: { backgroundColor: theme.colors.primary },
   iconIdle: { backgroundColor: theme.colors.surfaceMuted },

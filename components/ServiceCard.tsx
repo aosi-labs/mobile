@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { catColor, catLabel } from '../lib/constants';
 import { formatDistance } from '../lib/geo';
 import { readiness } from '../lib/readiness';
 import { theme } from '../lib/theme';
 import type { Service } from '../lib/types';
+import { PressableScale } from './PressableScale';
 
 const CATEGORY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   food: 'fast-food-outline',
@@ -40,12 +40,12 @@ export function ServiceCard({ service, distanceMeters, onPress }: Props) {
   const location = [service.suburb, service.state].filter(Boolean).join(', ');
 
   return (
-    <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      onPress={() => {
-        void Haptics.selectionAsync();
-        onPress();
-      }}
+    <PressableScale
+      style={styles.card}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${service.name}, ${catLabel(service.category)}, ${location || 'location unknown'}`}
+      accessibilityHint="Opens the service details"
     >
       <View style={[styles.iconWrap, { backgroundColor: color + '1A' }]}>
         <Ionicons name={icon} size={22} color={color} />
@@ -83,7 +83,7 @@ export function ServiceCard({ service, distanceMeters, onPress }: Props) {
         </View>
       </View>
       <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -106,7 +106,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     ...theme.shadow,
   },
-  cardPressed: { opacity: 0.7 },
   iconWrap: {
     width: 44,
     height: 44,

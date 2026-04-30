@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '../lib/theme';
+import { PressableScale } from './PressableScale';
 
 export type Intent = {
   key: string;
@@ -37,23 +37,23 @@ export function IntentStrip({ active, onChange }: Props) {
       {INTENTS.map((intent) => {
         const isActive = active === intent.key;
         return (
-          <Pressable
+          <PressableScale
             key={intent.key}
-            onPress={() => {
-              void Haptics.selectionAsync();
-              onChange(isActive ? null : intent.key);
-            }}
-            style={({ pressed }) => [
+            onPress={() => onChange(isActive ? null : intent.key)}
+            scaleTo={0.94}
+            style={[
               styles.chip,
               isActive && { backgroundColor: intent.color, borderColor: intent.color },
-              pressed && { opacity: 0.7 },
             ]}
+            accessibilityRole="button"
+            accessibilityLabel={`${intent.label} filter`}
+            accessibilityState={{ selected: isActive }}
           >
             <View style={[styles.iconBubble, isActive ? styles.iconBubbleActive : { backgroundColor: intent.color + '1A' }]}>
               <Ionicons name={intent.icon} size={14} color={isActive ? '#fff' : intent.color} />
             </View>
             <Text style={[styles.label, isActive && styles.labelActive]}>{intent.label}</Text>
-          </Pressable>
+          </PressableScale>
         );
       })}
     </ScrollView>

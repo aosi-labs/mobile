@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -59,8 +59,14 @@ function AppShell() {
   const location = useUserLocation();
 
   const [permissionResolved, setPermissionResolved] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState('');
   const [activeIntent, setActiveIntent] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(searchInput.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [region, setRegion] = useState<Region>(INITIAL_REGION);
   const [selected, setSelected] = useState<Service | null>(null);
@@ -76,7 +82,7 @@ function AppShell() {
   );
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = query.toLowerCase();
     return services.filter((s) => {
       if (intentCategory && s.category !== intentCategory) return false;
       if (!needle) return true;
@@ -185,8 +191,8 @@ function AppShell() {
         )}
         ListHeaderComponent={
           <Header
-            query={query}
-            onQuery={setQuery}
+            query={searchInput}
+            onQuery={setSearchInput}
             location={location}
             onLocationPress={onLocationBannerPress}
             activeIntent={activeIntent}
@@ -249,9 +255,9 @@ function AppShell() {
           ) : viewMode === 'map' ? null : (
             <EmptyState
               hasError={!!error}
-              hasFilters={!!query || !!activeIntent}
+              hasFilters={!!searchInput || !!activeIntent}
               onClear={() => {
-                setQuery('');
+                setSearchInput('');
                 setActiveIntent(null);
               }}
               onRetry={refresh}
