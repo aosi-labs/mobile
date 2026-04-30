@@ -27,7 +27,6 @@ TextInputAny.defaultProps.maxFontSizeMultiplier = 1.4;
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import MapView, { Marker, type Region } from 'react-native-maps';
 import { AboutSheet } from './components/AboutSheet';
-import { CategoryMarker } from './components/CategoryMarker';
 import { EmuMark, EmuMascot } from './components/EmuMascot';
 import { IntentStrip, INTENTS } from './components/IntentStrip';
 import { LocationBanner } from './components/LocationBanner';
@@ -37,6 +36,7 @@ import { ServiceDetailSheet, type ServiceDetailHandle } from './components/Servi
 import { SkeletonList } from './components/SkeletonList';
 import { useServices } from './hooks/useServices';
 import { useUserLocation } from './hooks/useUserLocation';
+import { catColor } from './lib/constants';
 import { distanceMetres } from './lib/geo';
 import { theme } from './lib/theme';
 import type { Service } from './lib/types';
@@ -226,10 +226,9 @@ function AppShell() {
               <Marker
                 key={s.id}
                 coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
+                pinColor={catColor(s.category)}
                 title={s.name}
                 description={s.suburb}
-                anchor={{ x: 0.5, y: 0.5 }}
-                tracksViewChanges={false}
                 onPress={() => {
                   void Haptics.selectionAsync();
                   const dist =
@@ -243,9 +242,7 @@ function AppShell() {
                       : null;
                   openDetail(s, dist);
                 }}
-              >
-                <CategoryMarker category={s.category} precision={s.location_precision} />
-              </Marker>
+              />
             ))}
           </MapView>
           {region.latitudeDelta > 8 ? (
