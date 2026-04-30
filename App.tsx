@@ -15,6 +15,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
+
+// Cap Dynamic Type scaling globally so layouts don't break at the largest a11y
+// sizes while still respecting user preferences up to ~1.4x.
+const TextAny = Text as unknown as { defaultProps?: Record<string, unknown> };
+TextAny.defaultProps = TextAny.defaultProps ?? {};
+TextAny.defaultProps.maxFontSizeMultiplier = 1.4;
+const TextInputAny = TextInput as unknown as { defaultProps?: Record<string, unknown> };
+TextInputAny.defaultProps = TextInputAny.defaultProps ?? {};
+TextInputAny.defaultProps.maxFontSizeMultiplier = 1.4;
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import MapView, { Marker, type Region } from 'react-native-maps';
 import { AboutSheet } from './components/AboutSheet';
@@ -349,6 +358,9 @@ function Header({
             }}
             hitSlop={12}
             style={styles.infoBtn}
+            accessibilityRole="button"
+            accessibilityLabel="About aosi"
+            accessibilityHint="Opens information, crisis lines, and source links"
           >
             <Ionicons name="information-circle-outline" size={26} color={theme.colors.textSecondary} />
           </Pressable>

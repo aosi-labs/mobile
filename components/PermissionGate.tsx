@@ -35,6 +35,9 @@ export function PermissionGate({ onAllow, onSkip, isRequesting }: Props) {
             onAllow();
           }}
           disabled={isRequesting}
+          accessibilityRole="button"
+          accessibilityLabel={isRequesting ? 'Requesting location permission' : 'Use my location'}
+          accessibilityState={{ disabled: !!isRequesting, busy: !!isRequesting }}
         >
           <Text style={styles.primaryText}>{isRequesting ? 'Requesting…' : 'Use my location'}</Text>
         </Pressable>
@@ -44,6 +47,8 @@ export function PermissionGate({ onAllow, onSkip, isRequesting }: Props) {
             void Haptics.selectionAsync();
             onSkip();
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Browse without location"
         >
           <Text style={styles.secondaryText}>Browse without location</Text>
         </Pressable>

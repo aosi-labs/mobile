@@ -51,6 +51,8 @@ export function ServiceDetail({ service, distanceMeters, onClose }: Props) {
             }}
             hitSlop={16}
             style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
           >
             <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
           </Pressable>
@@ -163,6 +165,8 @@ function ActionButton({
         primary ? styles.actionPrimary : styles.actionSecondary,
         pressed && { opacity: 0.7 },
       ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
     >
       <Ionicons name={icon} size={18} color={primary ? '#fff' : theme.colors.primary} />
       <Text style={[styles.actionLabel, primary ? styles.actionLabelPrimary : styles.actionLabelSecondary]}>

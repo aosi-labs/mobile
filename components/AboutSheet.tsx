@@ -150,6 +150,8 @@ function CrisisLine({ label, number }: { label: string; number: string }) {
         void Linking.openURL(`tel:${number.replace(/\s/g, '')}`);
       }}
       style={({ pressed }) => [styles.crisisLine, pressed && { opacity: 0.7 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Call ${label} at ${number}`}
     >
       <Text style={styles.crisisLabel}>{label}</Text>
       <Text style={styles.crisisNumber}>{number}</Text>
@@ -167,7 +169,12 @@ function LinkBtn({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.7 }]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.7 }]}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+    >
       <Ionicons name={icon} size={16} color={theme.colors.primary} />
       <Text style={styles.linkText}>{label}</Text>
     </Pressable>
