@@ -53,7 +53,7 @@ export function PermissionGate({ onAllow, onPostcode, onSkip, isRequesting }: Pr
           accessibilityRole="button"
           accessibilityLabel="Use my postcode instead"
         >
-          <Ionicons name="location-outline" size={18} color={theme.colors.primary} />
+          <Ionicons name="location-outline" size={18} color={theme.colors.primaryDeep} />
           <Text style={styles.altText}>Use my postcode instead</Text>
         </Pressable>
         <Pressable
@@ -84,23 +84,26 @@ export function PermissionGate({ onAllow, onPostcode, onSkip, isRequesting }: Pr
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.colors.surface, justifyContent: 'space-between' },
+  root: { flex: 1, backgroundColor: theme.colors.bg, justifyContent: 'space-between' },
   content: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: theme.spacing.xxl },
   mascotWrap: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: '#FBF6EE',
+    width: 184,
+    height: 184,
+    borderRadius: 92,
+    backgroundColor: theme.colors.cream,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.xl,
+    ...theme.shadow,
   },
   title: { ...theme.type.title1, color: theme.colors.text, textAlign: 'center', marginBottom: theme.spacing.md },
   body: {
     ...theme.type.body,
     color: theme.colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 25,
     marginBottom: theme.spacing.lg,
   },
   privacy: { ...theme.type.footnote, color: theme.colors.textTertiary, textAlign: 'center' },
@@ -111,8 +114,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: theme.colors.primary,
-    paddingVertical: 14,
-    borderRadius: theme.radius.md,
+    paddingVertical: 16,
+    borderRadius: theme.radius.pill,
+    ...theme.shadowLifted,
   },
   primaryText: { ...theme.type.headline, color: '#fff' },
   altBtn: {
@@ -120,20 +124,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: theme.colors.primaryMuted,
-    paddingVertical: 14,
-    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderStrong,
+    paddingVertical: 16,
+    borderRadius: theme.radius.pill,
   },
-  altText: { ...theme.type.headline, color: theme.colors.primary },
+  altText: { ...theme.type.headline, color: theme.colors.primaryDeep },
   secondaryBtn: { paddingVertical: 12, alignItems: 'center' },
   secondaryText: { ...theme.type.callout, color: theme.colors.textSecondary },
   pressed: { opacity: 0.7 },
   legalFooter: {
     ...theme.type.caption,
+    fontWeight: '400',
     color: theme.colors.textTertiary,
     textAlign: 'center',
     marginTop: theme.spacing.sm,
     lineHeight: 18,
   },
-  legalLink: { color: theme.colors.primary, fontWeight: '500' },
+  legalLink: { color: theme.colors.primary, fontWeight: '600' },
 });

@@ -236,7 +236,10 @@ function readyBg(k: 'ready' | 'verify' | 'low') {
   };
 }
 function readyColor(k: 'ready' | 'verify' | 'low') {
-  return { color: k === 'ready' ? '#065F46' : k === 'verify' ? '#92400E' : '#991B1B' };
+  return {
+    color:
+      k === 'ready' ? theme.colors.successText : k === 'verify' ? theme.colors.warningText : theme.colors.dangerText,
+  };
 }
 function readyDot(k: 'ready' | 'verify' | 'low') {
   return {
@@ -245,13 +248,17 @@ function readyDot(k: 'ready' | 'verify' | 'low') {
 }
 
 const styles = StyleSheet.create({
-  sheetBg: { backgroundColor: theme.colors.surface, borderTopLeftRadius: theme.radius.xl, borderTopRightRadius: theme.radius.xl },
-  handleIndicator: { backgroundColor: theme.colors.borderStrong, width: 36, height: 4 },
+  sheetBg: {
+    backgroundColor: theme.colors.surfaceWarm,
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
+  },
+  handleIndicator: { backgroundColor: theme.colors.borderStrong, width: 40, height: 5 },
 
   body: { paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxxl, paddingTop: theme.spacing.sm },
   heroIcon: {
-    width: 56,
-    height: 56,
+    width: 60,
+    height: 60,
     borderRadius: theme.radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -259,51 +266,62 @@ const styles = StyleSheet.create({
   },
   name: { ...theme.type.title2, color: theme.colors.text, marginBottom: theme.spacing.sm },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: theme.spacing.lg },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: theme.radius.pill },
-  badgeText: { ...theme.type.caption, color: '#fff', fontWeight: '600' },
+  badge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: theme.radius.pill },
+  badgeText: { ...theme.type.caption, color: '#fff' },
   readyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: theme.radius.pill,
   },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  readyText: { ...theme.type.caption, fontWeight: '600' },
+  readyText: { ...theme.type.caption },
   distChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.primaryMuted,
+    backgroundColor: theme.colors.accentMuted,
   },
-  distText: { ...theme.type.caption, fontWeight: '600', color: theme.colors.primary },
-  desc: { ...theme.type.body, color: theme.colors.textSecondary, lineHeight: 24, marginBottom: theme.spacing.xl },
+  distText: { ...theme.type.caption, color: theme.colors.accent },
+  desc: { ...theme.type.body, color: theme.colors.textSecondary, lineHeight: 25, marginBottom: theme.spacing.xl },
 
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, marginBottom: theme.spacing.xl },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: theme.radius.md,
+    gap: 7,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: theme.radius.pill,
   },
-  actionPrimary: { backgroundColor: theme.colors.primary },
-  actionSecondary: { backgroundColor: theme.colors.primaryMuted },
+  actionPrimary: { backgroundColor: theme.colors.primary, ...theme.shadow },
+  actionSecondary: {
+    backgroundColor: theme.colors.primaryMuted,
+    borderWidth: 1,
+    borderColor: 'rgba(47,109,84,0.18)',
+  },
   actionLabel: { ...theme.type.callout, fontWeight: '600' },
   actionLabelPrimary: { color: '#fff' },
-  actionLabelSecondary: { color: theme.colors.primary },
+  actionLabelSecondary: { color: theme.colors.primaryDeep },
 
-  section: { marginBottom: theme.spacing.xl },
+  section: {
+    marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.lg,
+  },
   sectionTitle: {
     ...theme.type.caption,
     color: theme.colors.textTertiary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     marginBottom: theme.spacing.sm,
   },
   field: { flexDirection: 'row', gap: theme.spacing.md, paddingVertical: 6 },
@@ -325,13 +343,13 @@ const styles = StyleSheet.create({
   verifyNote: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: theme.spacing.lg,
     backgroundColor: theme.colors.warningMuted,
-    borderRadius: theme.radius.sm,
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.lg,
   },
-  verifyText: { ...theme.type.caption, color: '#78350F', flex: 1, fontStyle: 'italic' },
+  verifyText: { ...theme.type.footnote, color: theme.colors.warningText, flex: 1 },
 });

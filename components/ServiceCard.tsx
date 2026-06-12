@@ -66,8 +66,7 @@ export function ServiceCard({ service, distanceMeters, onPress }: Props) {
           </Text>
         </View>
         <View style={styles.tagRow}>
-          <ReadyDot kind={r.key} />
-          <Text style={styles.readyLabel}>{r.label}</Text>
+          <ReadyPill kind={r.key} label={r.label} />
           {service.phone ? (
             <View style={styles.tag}>
               <Ionicons name="call-outline" size={11} color={theme.colors.textSecondary} />
@@ -87,10 +86,19 @@ export function ServiceCard({ service, distanceMeters, onPress }: Props) {
   );
 }
 
-function ReadyDot({ kind }: { kind: 'ready' | 'verify' | 'low' }) {
-  const color =
+function ReadyPill({ kind, label }: { kind: 'ready' | 'verify' | 'low'; label: string }) {
+  const bg =
+    kind === 'ready' ? theme.colors.successMuted : kind === 'verify' ? theme.colors.warningMuted : theme.colors.dangerMuted;
+  const fg =
+    kind === 'ready' ? theme.colors.successText : kind === 'verify' ? theme.colors.warningText : theme.colors.dangerText;
+  const dot =
     kind === 'ready' ? theme.colors.success : kind === 'verify' ? theme.colors.warning : theme.colors.danger;
-  return <View style={[styles.dot, { backgroundColor: color }]} />;
+  return (
+    <View style={[styles.readyPill, { backgroundColor: bg }]}>
+      <View style={[styles.dot, { backgroundColor: dot }]} />
+      <Text style={[styles.readyLabel, { color: fg }]}>{label}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -98,17 +106,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
-    paddingVertical: theme.spacing.md,
+    paddingVertical: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     marginHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
     gap: theme.spacing.md,
     ...theme.shadow,
   },
   iconWrap: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     borderRadius: theme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -116,26 +126,34 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.sm },
   name: { ...theme.type.headline, color: theme.colors.text, flex: 1 },
-  distance: { ...theme.type.caption, color: theme.colors.primary, marginTop: 2 },
+  distance: { ...theme.type.caption, color: theme.colors.accent, marginTop: 2 },
   metaRow: { marginTop: 2 },
   metaText: { ...theme.type.footnote, color: theme.colors.textSecondary },
   tagRow: {
-    marginTop: 6,
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: 6,
     flexWrap: 'wrap',
   },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  readyLabel: { ...theme.type.caption, color: theme.colors.textSecondary, marginLeft: -4 },
+  readyPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radius.pill,
+  },
+  readyLabel: { ...theme.type.caption },
   tag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.sm,
+    borderRadius: theme.radius.pill,
   },
   tagText: { ...theme.type.caption, color: theme.colors.textSecondary },
 });

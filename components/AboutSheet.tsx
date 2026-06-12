@@ -214,7 +214,7 @@ function LinkBtn({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.colors.surface },
+  root: { flex: 1, backgroundColor: theme.colors.bg },
   header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: theme.colors.border, alignSelf: 'center', marginBottom: theme.spacing.sm },
   closeBtn: {
@@ -246,7 +246,9 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#FBF6EE',
+    backgroundColor: theme.colors.cream,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
@@ -268,7 +270,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     marginBottom: theme.spacing.xl,
   },
-  disclaimerText: { ...theme.type.subhead, color: '#78350F', lineHeight: 20, flex: 1 },
+  disclaimerText: { ...theme.type.subhead, color: theme.colors.warningText, lineHeight: 20, flex: 1 },
   disclaimerEmphasis: { fontWeight: '700' },
 
   section: { marginBottom: theme.spacing.xl },

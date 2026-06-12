@@ -426,7 +426,15 @@ function Header({
   return (
     <View style={styles.headerContainer}>
       <View style={styles.topBar}>
-        <EmuMark size={44} />
+        <View style={styles.brandRow}>
+          <View style={styles.brandMark}>
+            <EmuMark size={34} />
+          </View>
+          <View>
+            <Text style={styles.brandName}>aosi</Text>
+            <Text style={styles.brandTag}>Find support near you</Text>
+          </View>
+        </View>
         {isSyncing ? (
           <View style={styles.syncBadge}>
             <ActivityIndicator size="small" color={theme.colors.primary} />
@@ -444,7 +452,7 @@ function Header({
             accessibilityLabel="About aosi"
             accessibilityHint="Opens information, crisis lines, and source links"
           >
-            <Ionicons name="information-circle-outline" size={26} color={theme.colors.textSecondary} />
+            <Ionicons name="information-circle-outline" size={24} color={theme.colors.textSecondary} />
           </Pressable>
         )}
       </View>
@@ -483,6 +491,7 @@ function Header({
         <View style={styles.viewToggle}>
           <ToggleBtn
             icon="list"
+            label="List"
             active={viewMode === 'list'}
             onPress={() => {
               void Haptics.selectionAsync();
@@ -491,6 +500,7 @@ function Header({
           />
           <ToggleBtn
             icon="map"
+            label="Map"
             active={viewMode === 'map'}
             onPress={() => {
               void Haptics.selectionAsync();
@@ -505,10 +515,12 @@ function Header({
 
 function ToggleBtn({
   icon,
+  label,
   active,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
+  label: string;
   active: boolean;
   onPress: () => void;
 }) {
@@ -516,8 +528,12 @@ function ToggleBtn({
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.toggleBtn, active && styles.toggleBtnActive, pressed && { opacity: 0.7 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} view`}
+      accessibilityState={{ selected: active }}
     >
-      <Ionicons name={icon} size={16} color={active ? '#fff' : theme.colors.textSecondary} />
+      <Ionicons name={icon} size={14} color={active ? '#fff' : theme.colors.textSecondary} />
+      <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>{label}</Text>
     </Pressable>
   );
 }
@@ -565,31 +581,44 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.bg },
 
   topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.xs,
+  },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  brandMark: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: theme.colors.cream,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  brandName: { ...theme.type.title3, color: theme.colors.primaryDeep, letterSpacing: -0.3 },
+  brandTag: { ...theme.type.footnote, color: theme.colors.textSecondary, marginTop: 1 },
   syncBadge: {
-    position: 'absolute',
-    right: theme.spacing.lg,
-    top: theme.spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     backgroundColor: theme.colors.primaryMuted,
     borderRadius: theme.radius.pill,
   },
   infoBtn: {
-    position: 'absolute',
-    right: theme.spacing.lg,
-    top: theme.spacing.md,
-    padding: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  syncText: { ...theme.type.caption, color: theme.colors.primary, fontWeight: '600' },
+  syncText: { ...theme.type.caption, color: theme.colors.primary },
 
   searchWrap: {
     flexDirection: 'row',
@@ -598,9 +627,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     marginHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 12,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow,
   },
   searchInput: { flex: 1, ...theme.type.callout, color: theme.colors.text, padding: 0 },
@@ -618,19 +649,30 @@ const styles = StyleSheet.create({
 
   viewToggle: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    padding: 2,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 3,
     gap: 2,
   },
-  toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: theme.radius.sm - 2 },
+  toggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.radius.pill,
+  },
   toggleBtnActive: { backgroundColor: theme.colors.primary },
+  toggleLabel: { ...theme.type.caption, color: theme.colors.textSecondary },
+  toggleLabelActive: { color: '#fff' },
 
   headerContainer: {
     backgroundColor: theme.colors.bg,
     paddingBottom: theme.spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.borderStrong,
   },
   mapBody: { flex: 1, position: 'relative' },
   listBody: { flex: 1 },
@@ -642,19 +684,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(15,23,42,0.85)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(43,38,32,0.88)',
     borderRadius: theme.radius.pill,
+    ...theme.shadowLifted,
   },
-  zoomHintText: { ...theme.type.caption, color: '#fff', fontWeight: '600' },
+  zoomHintText: { ...theme.type.caption, color: '#fff' },
 
   empty: { padding: theme.spacing.xxxl, alignItems: 'center' },
   emptyMascot: {
     width: 180,
     height: 180,
     borderRadius: 90,
-    backgroundColor: '#FBF6EE',
+    backgroundColor: theme.colors.cream,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.lg,
@@ -668,9 +713,9 @@ const styles = StyleSheet.create({
   },
   emptyBtn: {
     backgroundColor: theme.colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: theme.radius.md,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: theme.radius.pill,
   },
   emptyBtnText: { ...theme.type.callout, color: '#fff', fontWeight: '600' },
 

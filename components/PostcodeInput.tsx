@@ -112,7 +112,7 @@ export function PostcodeInput({ visible, initialValue, onCancel, onConfirm }: Pr
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.colors.surface },
+  root: { flex: 1, backgroundColor: theme.colors.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -140,10 +140,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderStrong,
+    borderRadius: theme.radius.lg,
+    ...theme.shadow,
   },
   input: {
     flex: 1,
@@ -158,22 +161,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    padding: theme.spacing.md,
+    padding: theme.spacing.lg,
     backgroundColor: theme.colors.successMuted,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
   },
-  matchLocality: { ...theme.type.headline, color: '#065F46' },
-  matchHint: { ...theme.type.footnote, color: '#065F46', marginTop: 2 },
+  matchLocality: { ...theme.type.headline, color: theme.colors.successText },
+  matchHint: { ...theme.type.footnote, color: theme.colors.successText, marginTop: 2 },
 
   errorCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    padding: theme.spacing.md,
+    padding: theme.spacing.lg,
     backgroundColor: theme.colors.dangerMuted,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
   },
-  errorText: { ...theme.type.subhead, color: '#991B1B', flex: 1, lineHeight: 20 },
+  errorText: { ...theme.type.subhead, color: theme.colors.dangerText, flex: 1, lineHeight: 20 },
 
   hint: { ...theme.type.subhead, color: theme.colors.textSecondary, lineHeight: 20 },
   privacy: { ...theme.type.footnote, color: theme.colors.textTertiary },
