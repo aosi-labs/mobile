@@ -3,6 +3,7 @@ import type { Service } from './types';
 
 const DB_NAME = 'aosi.db';
 const META_KEY_LAST_SYNCED = 'last_synced';
+const META_KEY_SYNC_SIGNATURE = 'sync_signature';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -55,24 +56,37 @@ export async function initDb(): Promise<void> {
   `);
 }
 
-export async function getLastSynced(): Promise<number | null> {
+async function getMeta(key: string): Promise<string | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ value: string }>(
     'SELECT value FROM meta WHERE key = ?',
-    META_KEY_LAST_SYNCED
+    key
   );
-  if (!row) return null;
-  const n = Number(row.value);
+  return row?.value ?? null;
+}
+
+async function setMeta(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', key, value);
+}
+
+export async function getLastSynced(): Promise<number | null> {
+  const value = await getMeta(META_KEY_LAST_SYNCED);
+  if (value == null) return null;
+  const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
 export async function setLastSynced(ts: number): Promise<void> {
-  const db = await getDb();
-  await db.runAsync(
-    'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
-    META_KEY_LAST_SYNCED,
-    String(ts)
-  );
+  await setMeta(META_KEY_LAST_SYNCED, String(ts));
+}
+
+export async function getSyncSignature(): Promise<string | null> {
+  return getMeta(META_KEY_SYNC_SIGNATURE);
+}
+
+export async function setSyncSignature(signature: string): Promise<void> {
+  await setMeta(META_KEY_SYNC_SIGNATURE, signature);
 }
 
 export async function countServices(): Promise<number> {
@@ -86,51 +100,62 @@ export async function loadAllServices(): Promise<Service[]> {
   return db.getAllAsync<Service>('SELECT * FROM services');
 }
 
+const INSERT_COLUMNS = [
+  'id', 'name', 'description', 'category', 'address', 'suburb', 'state', 'postcode',
+  'latitude', 'longitude', 'phone', 'email', 'website', 'hours', 'eligibility', 'cost',
+  'source_id', 'source_name', 'source_organisation', 'source_jurisdiction',
+  'source_license', 'source_url', 'source_date', 'quality', 'location_precision', 'duplicate_of',
+] as const;
+
+// 400 rows x 26 columns = 10,400 bound variables, well under SQLite's 32,766 cap.
+const INSERT_CHUNK = 400;
+
+function toRow(s: Service): (string | number | null)[] {
+  return [
+    s.id,
+    s.name ?? '',
+    s.description ?? '',
+    s.category ?? '',
+    s.address ?? '',
+    s.suburb ?? '',
+    s.state ?? '',
+    s.postcode ?? '',
+    s.latitude ?? null,
+    s.longitude ?? null,
+    s.phone ?? '',
+    s.email ?? '',
+    s.website ?? '',
+    s.hours ?? '',
+    s.eligibility ?? '',
+    s.cost ?? '',
+    s.source_id ?? '',
+    s.source_name ?? '',
+    s.source_organisation ?? '',
+    s.source_jurisdiction ?? '',
+    s.source_license ?? '',
+    s.source_url ?? '',
+    s.source_date ?? '',
+    s.quality ?? '',
+    s.location_precision ?? '',
+    s.duplicate_of ?? '',
+  ];
+}
+
 export async function replaceAllServices(rows: Service[]): Promise<void> {
   const db = await getDb();
+  const rowPlaceholder = `(${INSERT_COLUMNS.map(() => '?').join(', ')})`;
   await db.withTransactionAsync(async () => {
     await db.execAsync('DELETE FROM services');
-    const stmt = await db.prepareAsync(`
-      INSERT INTO services (
-        id, name, description, category, address, suburb, state, postcode,
-        latitude, longitude, phone, email, website, hours, eligibility, cost,
-        source_id, source_name, source_organisation, source_jurisdiction,
-        source_license, source_url, source_date, quality, location_precision, duplicate_of
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    try {
-      for (const s of rows) {
-        await stmt.executeAsync([
-          s.id,
-          s.name ?? '',
-          s.description ?? '',
-          s.category ?? '',
-          s.address ?? '',
-          s.suburb ?? '',
-          s.state ?? '',
-          s.postcode ?? '',
-          s.latitude ?? null,
-          s.longitude ?? null,
-          s.phone ?? '',
-          s.email ?? '',
-          s.website ?? '',
-          s.hours ?? '',
-          s.eligibility ?? '',
-          s.cost ?? '',
-          s.source_id ?? '',
-          s.source_name ?? '',
-          s.source_organisation ?? '',
-          s.source_jurisdiction ?? '',
-          s.source_license ?? '',
-          s.source_url ?? '',
-          s.source_date ?? '',
-          s.quality ?? '',
-          s.location_precision ?? '',
-          s.duplicate_of ?? '',
-        ]);
-      }
-    } finally {
-      await stmt.finalizeAsync();
+    for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+      const chunk = rows.slice(i, i + INSERT_CHUNK);
+      const params: (string | number | null)[] = [];
+      for (const s of chunk) params.push(...toRow(s));
+      await db.runAsync(
+        `INSERT INTO services (${INSERT_COLUMNS.join(', ')}) VALUES ${chunk
+          .map(() => rowPlaceholder)
+          .join(', ')}`,
+        params
+      );
     }
   });
 }

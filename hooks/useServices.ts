@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchAllServices } from '../lib/api';
+import { fetchFirstPage, fetchRemainingServices } from '../lib/api';
 import {
   countServices,
   getLastSynced,
+  getSyncSignature,
   initDb,
   loadAllServices,
   replaceAllServices,
   setLastSynced,
+  setSyncSignature,
 } from '../lib/db';
 import type { Service } from '../lib/types';
 
@@ -38,11 +40,21 @@ export function useServices(): ServicesState {
     setSyncProgress(0);
     setError(null);
     try {
-      const rows = await fetchAllServices((_batch, total) => {
+      // One-request probe first: if the dataset signature matches the last
+      // successful sync, skip downloading the remaining ~24 pages.
+      const first = await fetchFirstPage();
+      const [prevSignature, count] = await Promise.all([getSyncSignature(), countServices()]);
+      const now = Date.now();
+      if (count > 0 && prevSignature === first.signature) {
+        await setLastSynced(now);
+        setLastSyncedState(now);
+        return;
+      }
+      const rows = await fetchRemainingServices(first, (_batch, total) => {
         setSyncProgress(total);
       });
       await replaceAllServices(rows);
-      const now = Date.now();
+      await setSyncSignature(first.signature);
       await setLastSynced(now);
       setServices(rows);
       setLastSyncedState(now);
