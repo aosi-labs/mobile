@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Linking, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { theme } from '../lib/theme';
 import { EmuMascot } from './EmuMascot';
 
@@ -19,6 +20,18 @@ export function PermissionGate({ onAllow, onPostcode, onSkip, isRequesting }: Pr
     <SafeAreaView style={styles.root}>
       <View style={styles.content}>
         <View style={styles.mascotWrap}>
+          <Svg width={184} height={184} style={StyleSheet.absoluteFill} viewBox="0 0 184 184">
+            <Circle
+              cx="92"
+              cy="92"
+              r="89"
+              stroke={theme.colors.accent}
+              strokeOpacity={0.5}
+              strokeWidth="2"
+              strokeDasharray="2 10"
+              fill="none"
+            />
+          </Svg>
           <EmuMascot size={140} variant="searching" />
         </View>
         <Text style={styles.title}>G'day. Let's find help nearby.</Text>

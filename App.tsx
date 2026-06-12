@@ -27,6 +27,14 @@ TextInputAny.defaultProps = TextInputAny.defaultProps ?? {};
 TextInputAny.defaultProps.maxFontSizeMultiplier = 1.4;
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import MapView, { Marker, type Region } from 'react-native-maps';
+import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  Path,
+  Stop,
+} from 'react-native-svg';
 import { AboutSheet } from './components/AboutSheet';
 import { EmuMark, EmuMascot } from './components/EmuMascot';
 import { IntentStrip, INTENTS } from './components/IntentStrip';
@@ -52,8 +60,17 @@ const INITIAL_REGION: Region = {
 const NEAR_REGION_DELTA = 1.0;
 const MAX_MARKERS = 400;
 const LIST_LIMIT = 200;
+const ENTRANCE_COUNT = 12;
 
 type ViewMode = 'list' | 'map';
+
+function timeGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 5) return "You're up late";
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good arvo';
+  return 'Good evening';
+}
 
 export default function App() {
   return (
@@ -163,6 +180,7 @@ function AppShell() {
   if (isHydrating) {
     return (
       <SafeAreaView style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
+        <StatusBar style="dark" />
         <ActivityIndicator color={theme.colors.primary} />
       </SafeAreaView>
     );
@@ -171,6 +189,7 @@ function AppShell() {
   if (showPermissionGate) {
     return (
       <>
+        <StatusBar style="dark" />
         <PermissionGate
           isRequesting={location.status === 'requesting'}
           onAllow={async () => {
@@ -216,8 +235,8 @@ function AppShell() {
     : null;
 
   return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar style="dark" />
+    <View style={styles.root}>
+      <StatusBar style="light" />
 
       <Header
         query={searchInput}
@@ -278,12 +297,20 @@ function AppShell() {
           style={styles.listBody}
           data={ranked.slice(0, LIST_LIMIT)}
           keyExtractor={(item) => item.service.id}
-          renderItem={({ item }) => (
-            <ServiceCard
-              service={item.service}
-              distanceMeters={item.distance}
-              onPress={() => openDetail(item.service, item.distance)}
-            />
+          renderItem={({ item, index }) => (
+            <Animated.View
+              entering={
+                index < ENTRANCE_COUNT
+                  ? FadeInDown.delay(index * 45).reduceMotion(ReduceMotion.System)
+                  : undefined
+              }
+            >
+              <ServiceCard
+                service={item.service}
+                distanceMeters={item.distance}
+                onPress={() => openDetail(item.service, item.distance)}
+              />
+            </Animated.View>
           )}
           ListEmptyComponent={
             isLoading ? (
@@ -346,7 +373,7 @@ function AppShell() {
           setPostcodeOpen(false);
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -425,37 +452,69 @@ function Header({
 }: HeaderProps) {
   return (
     <View style={styles.headerContainer}>
-      <View style={styles.topBar}>
-        <View style={styles.brandRow}>
-          <View style={styles.brandMark}>
-            <EmuMark size={34} />
+      <SafeAreaView style={styles.heroSafe}>
+        <View style={styles.hero}>
+          <Svg
+            style={StyleSheet.absoluteFill}
+            viewBox="0 0 375 168"
+            preserveAspectRatio="none"
+          >
+            <Defs>
+              <SvgLinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor={theme.colors.primaryDeep} />
+                <Stop offset="1" stopColor={theme.colors.primary} />
+              </SvgLinearGradient>
+            </Defs>
+            {/* Cream base so the area under the wave matches the page */}
+            <Path d="M0 0 H375 V168 H0 Z" fill={theme.colors.bg} />
+            {/* Solid block ending in a soft double-curve, like rolling hills */}
+            <Path
+              d="M0 0 H375 V138 Q295 166 200 150 Q100 134 0 158 Z"
+              fill="url(#heroGrad)"
+            />
+            {/* Sun rings behind the emu */}
+            <Circle cx="318" cy="40" r="58" stroke="rgba(255,253,248,0.10)" strokeWidth="1.5" fill="none" />
+            <Circle cx="318" cy="40" r="40" stroke="rgba(255,253,248,0.12)" strokeWidth="1.5" strokeDasharray="3 7" fill="none" />
+            {/* Scattered dot-painting accents */}
+            <Circle cx="30" cy="104" r="3" fill="rgba(255,253,248,0.16)" />
+            <Circle cx="52" cy="118" r="2" fill="rgba(255,253,248,0.12)" />
+            <Circle cx="22" cy="130" r="2" fill="rgba(255,253,248,0.10)" />
+            <Circle cx="150" cy="22" r="2" fill="rgba(255,253,248,0.12)" />
+            <Circle cx="170" cy="34" r="3" fill="rgba(255,253,248,0.09)" />
+          </Svg>
+
+          <View style={styles.heroTopRow}>
+            <Text style={styles.heroWordmark}>aosi</Text>
+            {isSyncing ? (
+              <View style={styles.syncBadge}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.syncText}>{syncProgress.toLocaleString()}</Text>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  onInfoPress();
+                }}
+                hitSlop={12}
+                style={styles.infoBtn}
+                accessibilityRole="button"
+                accessibilityLabel="About aosi"
+                accessibilityHint="Opens information, crisis lines, and source links"
+              >
+                <Ionicons name="information-circle-outline" size={22} color="#FFFDF8" />
+              </Pressable>
+            )}
           </View>
-          <View>
-            <Text style={styles.brandName}>aosi</Text>
-            <Text style={styles.brandTag}>Find support near you</Text>
+
+          <Text style={styles.heroGreeting}>{timeGreeting()}</Text>
+          <Text style={styles.heroTitle}>Find support{'\n'}near you</Text>
+
+          <View style={styles.heroEmu}>
+            <EmuMark size={44} />
           </View>
         </View>
-        {isSyncing ? (
-          <View style={styles.syncBadge}>
-            <ActivityIndicator size="small" color={theme.colors.primary} />
-            <Text style={styles.syncText}>{syncProgress.toLocaleString()}</Text>
-          </View>
-        ) : (
-          <Pressable
-            onPress={() => {
-              void Haptics.selectionAsync();
-              onInfoPress();
-            }}
-            hitSlop={12}
-            style={styles.infoBtn}
-            accessibilityRole="button"
-            accessibilityLabel="About aosi"
-            accessibilityHint="Opens information, crisis lines, and source links"
-          >
-            <Ionicons name="information-circle-outline" size={24} color={theme.colors.textSecondary} />
-          </Pressable>
-        )}
-      </View>
+      </SafeAreaView>
 
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={18} color={theme.colors.textTertiary} />
@@ -552,16 +611,28 @@ function EmptyState({
   return (
     <View style={styles.empty}>
       <View style={styles.emptyMascot}>
+        <Svg width={180} height={180} style={StyleSheet.absoluteFill} viewBox="0 0 180 180">
+          <Circle
+            cx="90"
+            cy="90"
+            r="86"
+            stroke={theme.colors.accent}
+            strokeOpacity={0.45}
+            strokeWidth="2"
+            strokeDasharray="2 10"
+            fill="none"
+          />
+        </Svg>
         <EmuMascot size={140} variant={hasError ? 'concerned' : 'searching'} />
       </View>
       <Text style={styles.emptyTitle}>
-        {hasError ? "Couldn't load services" : hasFilters ? 'No matches' : 'No services'}
+        {hasError ? "Couldn't load services" : hasFilters ? 'Nothing here yet' : 'No services'}
       </Text>
       <Text style={styles.emptyBody}>
         {hasError
           ? 'Check your connection and try again.'
           : hasFilters
-          ? 'Try a different search or clear filters.'
+          ? 'No worries. Try a different word, or clear the filters and start fresh.'
           : 'Pull down to refresh.'}
       </Text>
       {hasError ? (
@@ -580,45 +651,65 @@ function EmptyState({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.bg },
 
-  topBar: {
+  heroSafe: { backgroundColor: theme.colors.primaryDeep },
+  hero: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.xs,
+    paddingBottom: 42,
+  },
+  heroTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
-  brandMark: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+  heroWordmark: {
+    ...theme.type.headline,
+    color: 'rgba(255,253,248,0.92)',
+    letterSpacing: 0.5,
+  },
+  heroGreeting: {
+    ...theme.type.subhead,
+    color: 'rgba(255,253,248,0.78)',
+    marginBottom: 2,
+  },
+  heroTitle: {
+    ...theme.type.title1,
+    fontSize: 30,
+    lineHeight: 34,
+    color: '#FFFDF8',
+    maxWidth: '70%',
+  },
+  heroEmu: {
+    position: 'absolute',
+    right: theme.spacing.lg,
+    top: 48,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: theme.colors.cream,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    ...theme.shadowLifted,
   },
-  brandName: { ...theme.type.title3, color: theme.colors.primaryDeep, letterSpacing: -0.3 },
-  brandTag: { ...theme.type.footnote, color: theme.colors.textSecondary, marginTop: 1 },
   syncBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    backgroundColor: theme.colors.primaryMuted,
+    backgroundColor: 'rgba(255,253,248,0.18)',
     borderRadius: theme.radius.pill,
   },
   infoBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.colors.surfaceMuted,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,253,248,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  syncText: { ...theme.type.caption, color: theme.colors.primary },
+  syncText: { ...theme.type.caption, color: '#FFFDF8' },
 
   searchWrap: {
     flexDirection: 'row',
@@ -626,13 +717,13 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: theme.colors.surface,
     marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.sm,
+    marginTop: -26,
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    ...theme.shadow,
+    ...theme.shadowLifted,
   },
   searchInput: { flex: 1, ...theme.type.callout, color: theme.colors.text, padding: 0 },
 

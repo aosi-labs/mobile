@@ -43,13 +43,14 @@ export function IntentStrip({ active, onChange }: Props) {
             scaleTo={0.94}
             style={[
               styles.chip,
+              { backgroundColor: intent.color + '14', borderColor: intent.color + '33' },
               isActive && { backgroundColor: intent.color, borderColor: intent.color },
             ]}
             accessibilityRole="button"
             accessibilityLabel={`${intent.label} filter`}
             accessibilityState={{ selected: isActive }}
           >
-            <View style={[styles.iconBubble, isActive ? styles.iconBubbleActive : { backgroundColor: intent.color + '1A' }]}>
+            <View style={[styles.iconBubble, isActive ? styles.iconBubbleActive : { backgroundColor: intent.color + '26' }]}>
               <Ionicons name={intent.icon} size={14} color={isActive ? '#fff' : intent.color} />
             </View>
             <Text style={[styles.label, isActive && styles.labelActive]}>{intent.label}</Text>
@@ -72,11 +73,8 @@ const styles = StyleSheet.create({
     gap: 7,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadow,
   },
   iconBubble: {
     width: 24,

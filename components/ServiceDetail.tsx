@@ -80,31 +80,39 @@ function ServiceDetailContent({ service, distanceMeters }: { service: Service; d
 
   return (
     <BottomSheetScrollView contentContainerStyle={styles.body}>
-      <View style={[styles.heroIcon, { backgroundColor: color + '1A' }]}>
-        <Ionicons name="business-outline" size={28} color={color} />
-      </View>
-      <Text style={styles.name}>{service.name}</Text>
-      <View style={styles.badges}>
-        <View style={[styles.badge, { backgroundColor: color }]}>
-          <Text style={styles.badgeText}>{catLabel(service.category)}</Text>
+      <View style={[styles.heroBand, { backgroundColor: color + '14' }]}>
+        <View style={[styles.heroIcon, { backgroundColor: color + '22', borderColor: color + '55' }]}>
+          <Ionicons name="business-outline" size={30} color={color} />
         </View>
-        <View style={[styles.readyBadge, readyBg(r.key)]}>
-          <View style={[styles.dot, readyDot(r.key)]} />
-          <Text style={[styles.readyText, readyColor(r.key)]}>{r.label}</Text>
-        </View>
-        {distanceMeters != null ? (
-          <View style={styles.distChip}>
-            <Ionicons name="navigate-outline" size={12} color={theme.colors.primary} />
-            <Text style={styles.distText}>{formatDistance(distanceMeters)} away</Text>
+        <Text style={styles.name}>{service.name}</Text>
+        <View style={styles.badges}>
+          <View style={[styles.badge, { backgroundColor: color }]}>
+            <Text style={styles.badgeText}>{catLabel(service.category)}</Text>
           </View>
-        ) : null}
+          <View style={[styles.readyBadge, readyBg(r.key)]}>
+            <View style={[styles.dot, readyDot(r.key)]} />
+            <Text style={[styles.readyText, readyColor(r.key)]}>{r.label}</Text>
+          </View>
+          {distanceMeters != null ? (
+            <View style={styles.distChip}>
+              <Ionicons name="navigate-outline" size={12} color={theme.colors.accent} />
+              <Text style={styles.distText}>{formatDistance(distanceMeters)} away</Text>
+            </View>
+          ) : null}
+        </View>
       </View>
 
       {service.description ? <Text style={styles.desc}>{service.description}</Text> : null}
 
       <View style={styles.actions}>
         {service.phone ? (
-          <ActionButton icon="call" label="Call" primary onPress={() => open(`tel:${service.phone}`)} />
+          <ActionButton
+            icon="call"
+            label={`Call ${service.phone}`}
+            primary
+            fullWidth
+            onPress={() => open(`tel:${service.phone}`)}
+          />
         ) : null}
         {directionsUrl ? (
           <ActionButton icon="navigate" label="Directions" onPress={() => open(directionsUrl)} />
@@ -165,11 +173,13 @@ function ActionButton({
   label,
   onPress,
   primary,
+  fullWidth,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   primary?: boolean;
+  fullWidth?: boolean;
 }) {
   return (
     <Pressable
@@ -177,13 +187,17 @@ function ActionButton({
       style={({ pressed }) => [
         styles.actionBtn,
         primary ? styles.actionPrimary : styles.actionSecondary,
+        fullWidth && styles.actionFullWidth,
         pressed && { opacity: 0.7 },
       ]}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Ionicons name={icon} size={18} color={primary ? '#fff' : theme.colors.primary} />
-      <Text style={[styles.actionLabel, primary ? styles.actionLabelPrimary : styles.actionLabelSecondary]}>
+      <Ionicons name={icon} size={18} color={primary ? '#fff' : theme.colors.primaryDeep} />
+      <Text
+        style={[styles.actionLabel, primary ? styles.actionLabelPrimary : styles.actionLabelSecondary]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </Pressable>
@@ -255,17 +269,27 @@ const styles = StyleSheet.create({
   },
   handleIndicator: { backgroundColor: theme.colors.borderStrong, width: 40, height: 5 },
 
-  body: { paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxxl, paddingTop: theme.spacing.sm },
+  body: { paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxxl },
+  heroBand: {
+    marginHorizontal: -theme.spacing.xl,
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.lg,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    marginBottom: theme.spacing.lg,
+  },
   heroIcon: {
-    width: 60,
-    height: 60,
+    width: 64,
+    height: 64,
     borderRadius: theme.radius.lg,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.md,
   },
   name: { ...theme.type.title2, color: theme.colors.text, marginBottom: theme.spacing.sm },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: theme.spacing.lg },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   badge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: theme.radius.pill },
   badgeText: { ...theme.type.caption, color: '#fff' },
   readyBadge: {
@@ -285,7 +309,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.accentMuted,
+    backgroundColor: theme.colors.surface,
   },
   distText: { ...theme.type.caption, color: theme.colors.accent },
   desc: { ...theme.type.body, color: theme.colors.textSecondary, lineHeight: 25, marginBottom: theme.spacing.xl },
@@ -304,7 +328,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primaryMuted,
     borderWidth: 1,
     borderColor: 'rgba(47,109,84,0.18)',
+    flexGrow: 1,
+    justifyContent: 'center',
   },
+  actionFullWidth: { flexBasis: '100%', justifyContent: 'center' },
   actionLabel: { ...theme.type.callout, fontWeight: '600' },
   actionLabelPrimary: { color: '#fff' },
   actionLabelSecondary: { color: theme.colors.primaryDeep },

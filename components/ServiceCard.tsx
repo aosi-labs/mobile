@@ -47,6 +47,7 @@ export function ServiceCard({ service, distanceMeters, onPress }: Props) {
       accessibilityLabel={`${service.name}, ${catLabel(service.category)}, ${location || 'location unknown'}`}
       accessibilityHint="Opens the service details"
     >
+      <View style={[styles.rail, { backgroundColor: color }]} />
       <View style={[styles.iconWrap, { backgroundColor: color + '1A' }]}>
         <Ionicons name={icon} size={22} color={color} />
       </View>
@@ -114,7 +115,15 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.lg,
     marginBottom: theme.spacing.md,
     gap: theme.spacing.md,
+    overflow: 'hidden',
     ...theme.shadow,
+  },
+  rail: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   iconWrap: {
     width: 48,
