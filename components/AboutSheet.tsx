@@ -25,7 +25,7 @@ const VERSION_LABEL = (() => {
 const PRIVACY_URL = 'https://oa-sa.vercel.app/static/privacy.html';
 const TERMS_URL = 'https://oa-sa.vercel.app/static/terms.html';
 const SITE_URL = 'https://oa-sa.vercel.app/';
-const GITHUB_URL = 'https://github.com/oa-sa/iOS';
+const GITHUB_URL = 'https://github.com/aosi-labs/mobile';
 
 type Props = {
   visible: boolean;
