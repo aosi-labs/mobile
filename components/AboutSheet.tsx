@@ -11,9 +11,10 @@ import {
   View,
 } from 'react-native';
 import { openLink } from '../lib/links';
-import { telUrl } from '../lib/needs';
+import { CRISIS_LINES, telUrl } from '../lib/needs';
 import { theme } from '../lib/theme';
 import { EmuMascot } from './EmuMascot';
+import { SheetHeader } from './SheetHeader';
 
 const VERSION_LABEL = (() => {
   const v = Application.nativeApplicationVersion ?? '1.0.0';
@@ -41,24 +42,14 @@ export function AboutSheet({ visible, onClose, onChangeLocation }: Props) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={styles.root}>
-        <View style={styles.header}>
-          <View style={styles.handle} />
-          <Pressable
-            onPress={() => {
-              void Haptics.selectionAsync();
-              onClose();
-            }}
-            hitSlop={16}
-            style={styles.closeBtn}
-          >
-            <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
-          </Pressable>
-        </View>
+        <SheetHeader onClose={onClose} />
         <ScrollView contentContainerStyle={styles.body}>
           <View style={styles.mascotWrap}>
             <EmuMascot size={88} />
           </View>
-          <Text style={styles.title}>About aosi</Text>
+          <Text style={styles.title} accessibilityRole="header">
+            About aosi
+          </Text>
           <Text style={styles.tagline}>Find support services across Australia.</Text>
 
           <View style={styles.openSourceBadge}>
@@ -105,7 +96,7 @@ export function AboutSheet({ visible, onClose, onChangeLocation }: Props) {
                 void Haptics.selectionAsync();
                 onChangeLocation();
               }}
-              style={({ pressed }) => [styles.locationRow, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [styles.locationRow, pressed && { opacity: theme.pressedOpacity }]}
               accessibilityRole="button"
               accessibilityLabel="Change location"
               accessibilityHint="Switch between GPS, postcode, or no location"
@@ -116,16 +107,18 @@ export function AboutSheet({ visible, onClose, onChangeLocation }: Props) {
             </Pressable>
           </Section>
 
+          {/* One source of truth: the same CRISIS_LINES that power the crisis
+              sheet, in the same order, with the same plain-language
+              descriptions. Never hardcode a crisis number here. */}
           <Section title="Crisis lines">
             <Text style={styles.bodyText}>
               If you're in immediate danger or need urgent help right now:
             </Text>
             <View style={{ height: 8 }} />
-            <CrisisLine label="Lifeline" number="13 11 14" />
-            <CrisisLine label="1800RESPECT (DV)" number="1800 737 732" />
-            <CrisisLine label="Kids Helpline" number="1800 55 1800" />
-            <CrisisLine label="13YARN (Indigenous)" number="13 92 76" />
-            <CrisisLine label="Emergency" number="000" />
+            {CRISIS_LINES.map((line) => (
+              <CrisisLine key={line.phone} label={line.name} number={line.phone} desc={line.desc} />
+            ))}
+            <CrisisLine label="Emergency" number="000" desc="Police, fire or ambulance" />
           </Section>
 
           <View style={styles.linkRow}>
@@ -160,7 +153,9 @@ export function AboutSheet({ visible, onClose, onChangeLocation }: Props) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionTitle} accessibilityRole="header">
+        {title}
+      </Text>
       {children}
     </View>
   );
@@ -175,18 +170,22 @@ function Bullet({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CrisisLine({ label, number }: { label: string; number: string }) {
+function CrisisLine({ label, number, desc }: { label: string; number: string; desc?: string }) {
   return (
     <Pressable
       onPress={() => {
-        void Haptics.selectionAsync();
+        // Crisis calls always get the crisisCall haptic (medium impact).
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         openLink(telUrl(number));
       }}
-      style={({ pressed }) => [styles.crisisLine, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.crisisLine, pressed && { opacity: theme.pressedOpacity }]}
       accessibilityRole="button"
-      accessibilityLabel={`Call ${label} at ${number}`}
+      accessibilityLabel={`Call ${label} at ${number}${desc ? `. ${desc}` : ''}`}
     >
-      <Text style={styles.crisisLabel}>{label}</Text>
+      <View style={styles.crisisTextWrap}>
+        <Text style={styles.crisisLabel}>{label}</Text>
+        {desc ? <Text style={styles.crisisDesc}>{desc}</Text> : null}
+      </View>
       <Text style={styles.crisisNumber}>{number}</Text>
     </Pressable>
   );
@@ -204,7 +203,7 @@ function LinkBtn({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.linkBtn, pressed && { opacity: theme.pressedOpacity }]}
       accessibilityRole="link"
       accessibilityLabel={label}
     >
@@ -216,21 +215,8 @@ function LinkBtn({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.bg },
-  header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
-  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: theme.colors.border, alignSelf: 'center', marginBottom: theme.spacing.sm },
-  closeBtn: {
-    position: 'absolute',
-    right: theme.spacing.lg,
-    top: theme.spacing.sm,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: theme.colors.surfaceMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  body: { paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxxl },
-  bodyText: { ...theme.type.subhead, color: theme.colors.text, lineHeight: 22 },
+  body: { paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxxl, paddingTop: theme.spacing.md },
+  bodyText: { ...theme.type.subhead, color: theme.colors.text },
   openSourceBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -247,7 +233,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: theme.colors.cream,
+    backgroundColor: theme.colors.surfaceWarm,
     borderWidth: 1,
     borderColor: theme.colors.border,
     alignItems: 'center',
@@ -271,32 +257,39 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     marginBottom: theme.spacing.xl,
   },
-  disclaimerText: { ...theme.type.subhead, color: theme.colors.warningText, lineHeight: 20, flex: 1 },
+  disclaimerText: { ...theme.type.subhead, color: theme.colors.warningText, flex: 1 },
   disclaimerEmphasis: { fontWeight: '700' },
 
   section: { marginBottom: theme.spacing.xl },
   sectionTitle: {
-    ...theme.type.caption,
+    ...theme.type.eyebrow,
     color: theme.colors.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginBottom: theme.spacing.sm,
   },
 
   bulletRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
   bulletDot: { ...theme.type.body, color: theme.colors.textSecondary, marginTop: -2 },
-  bulletText: { ...theme.type.subhead, color: theme.colors.text, lineHeight: 22, flex: 1 },
+  bulletText: { ...theme.type.subhead, color: theme.colors.text, flex: 1 },
 
   crisisLine: {
+    minHeight: 44,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: theme.spacing.md,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.border,
   },
-  crisisLabel: { ...theme.type.subhead, color: theme.colors.text },
-  crisisNumber: { ...theme.type.headline, color: theme.colors.primary, fontWeight: '600' },
+  crisisTextWrap: { flex: 1 },
+  crisisLabel: { ...theme.type.subhead, color: theme.colors.text, fontWeight: '600' },
+  crisisDesc: { ...theme.type.footnote, color: theme.colors.textSecondary, marginTop: 1 },
+  crisisNumber: {
+    ...theme.type.headline,
+    color: theme.colors.primary,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
 
   linkRow: {
     flexDirection: 'row',
@@ -306,6 +299,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   linkBtn: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -330,6 +324,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   locationRow: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
@@ -339,6 +334,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
   },
   locationText: { ...theme.type.headline, color: theme.colors.primary, flex: 1 },
-  attributionLine: { ...theme.type.footnote, color: theme.colors.textSecondary, lineHeight: 18, marginBottom: 6 },
+  attributionLine: { ...theme.type.footnote, color: theme.colors.textSecondary, marginBottom: 6 },
   attributionLink: { color: theme.colors.primary, fontWeight: '500' },
 });

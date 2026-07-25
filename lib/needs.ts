@@ -1,8 +1,10 @@
 import type { Ionicons } from '@expo/vector-icons';
 
+import { catColor } from './constants';
+
 // A "need" is a plain-language door into the dataset. Labels are written for a
 // stressed person, not a database: "Talk to someone", not "Mental Health".
-// Colors match CAT_COLOR so needs and categories stay visually consistent.
+// Colors come from catColor() so needs and categories can never drift apart.
 
 export type CrisisNote = {
   text: string;
@@ -26,7 +28,7 @@ export const NEEDS: Need[] = [
     label: 'Food',
     sub: 'Meals and food relief',
     icon: 'fast-food',
-    color: '#16a34a',
+    color: catColor('food'),
     category: 'food',
   },
   {
@@ -34,7 +36,7 @@ export const NEEDS: Need[] = [
     label: 'Housing',
     sub: 'Somewhere safe to stay',
     icon: 'home',
-    color: '#d97706',
+    color: catColor('housing'),
     category: 'housing',
   },
   {
@@ -42,7 +44,7 @@ export const NEEDS: Need[] = [
     label: 'Talk to someone',
     sub: 'Support for tough times',
     icon: 'chatbubbles',
-    color: '#7c3aed',
+    color: catColor('mental_health'),
     category: 'mental_health',
     crisisNote: {
       text: "If this can't wait, Lifeline is free, confidential, and answers 24 hours a day.",
@@ -55,7 +57,7 @@ export const NEEDS: Need[] = [
     label: 'Money help',
     sub: 'Bills, debt and emergencies',
     icon: 'wallet',
-    color: '#ca8a04',
+    color: catColor('financial'),
     category: 'financial',
     crisisNote: {
       text: 'If money worries are getting on top of you, the National Debt Helpline gives free financial counselling. It is not a lender.',
@@ -68,7 +70,7 @@ export const NEEDS: Need[] = [
     label: 'Health',
     sub: 'Doctors and clinics',
     icon: 'medkit',
-    color: '#2563eb',
+    color: catColor('health'),
     category: 'health',
   },
   {
@@ -76,7 +78,7 @@ export const NEEDS: Need[] = [
     label: 'Legal',
     sub: 'Advice and your rights',
     icon: 'document-text',
-    color: '#ea580c',
+    color: catColor('legal'),
     category: 'legal',
   },
   {
@@ -84,7 +86,7 @@ export const NEEDS: Need[] = [
     label: 'Family',
     sub: 'Parents, kids and safety at home',
     icon: 'people',
-    color: '#dc2626',
+    color: catColor('family'),
     category: 'family',
     crisisNote: {
       text: 'If home is not safe right now, 1800RESPECT is free and confidential, any time of day.',
@@ -97,7 +99,7 @@ export const NEEDS: Need[] = [
     label: 'Work',
     sub: 'Jobs and training',
     icon: 'briefcase',
-    color: '#059669',
+    color: catColor('employment'),
     category: 'employment',
   },
 ];

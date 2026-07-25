@@ -7,14 +7,17 @@ import {
 } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
 import { forwardRef, useMemo, useState } from 'react';
-import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import { catColor, catLabel, SOURCE_VINTAGE } from '../lib/constants';
+import { Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { catColor, catColorDeep, catLabel, SOURCE_VINTAGE } from '../lib/constants';
 import { formatDistance } from '../lib/geo';
-import { openLink } from '../lib/links';
+import { directionsUrl, openLink } from '../lib/links';
+import { haptics } from '../lib/motion';
 import { telUrl, webUrl } from '../lib/needs';
-import { locationLabel, qualityLabel, readiness } from '../lib/readiness';
-import { theme } from '../lib/theme';
+import { locationLabel, qualityLabel } from '../lib/readiness';
+import { theme, tint } from '../lib/theme';
 import type { Service } from '../lib/types';
+import { Button } from './Button';
+import { ReadinessPill } from './ReadinessPill';
 
 export type ServiceDetailHandle = BottomSheetModal;
 
@@ -24,13 +27,20 @@ type Props = {
   onDismiss: () => void;
 };
 
-const SNAP_POINTS = ['42%', '92%'];
-
 export const ServiceDetailSheet = forwardRef<ServiceDetailHandle, Props>(function ServiceDetailSheet(
   { service, distanceMeters, onDismiss },
   ref,
 ) {
-  const snapPoints = useMemo(() => SNAP_POINTS, []);
+  // The first detent must keep the Call button above the fold. At large
+  // Dynamic Type sizes 42% is not enough, so the detent grows with the font
+  // scale (42% at scale 1, capped at 62%). useWindowDimensions re-renders
+  // when iOS delivers a font-scale change, so this tracks Dynamic Type
+  // changed mid-session rather than freezing at whatever it was on mount.
+  const { fontScale } = useWindowDimensions();
+  const snapPoints = useMemo(() => {
+    const first = Math.min(42 + Math.max(0, fontScale - 1) * 35, 62);
+    return [`${Math.round(first)}%`, '92%'];
+  }, [fontScale]);
 
   const renderBackdrop = useMemo(
     () =>
@@ -42,6 +52,9 @@ export const ServiceDetailSheet = forwardRef<ServiceDetailHandle, Props>(functio
             disappearsOnIndex={-1}
             opacity={0.45}
             pressBehavior="close"
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Close details"
           />
         );
       },
@@ -65,23 +78,19 @@ export const ServiceDetailSheet = forwardRef<ServiceDetailHandle, Props>(functio
   );
 });
 
+// VoiceOver containment for this sheet is handled in App.tsx by hiding the
+// screen stack while a service is selected: the sheet renders in the
+// bottom-sheet portal, so accessibilityViewIsModal here could not silence
+// the screens behind it (the prop only affects sibling views).
 function ServiceDetailContent({ service, distanceMeters }: { service: Service; distanceMeters?: number | null }) {
-  const r = readiness(service);
   const color = catColor(service.category);
-  const directionsUrl =
-    service.latitude && service.longitude
-      ? Platform.OS === 'ios'
-        ? `https://maps.apple.com/?daddr=${service.latitude},${service.longitude}`
-        : `https://www.google.com/maps/dir/?api=1&destination=${service.latitude},${service.longitude}`
+  const deep = catColorDeep(service.category);
+  const directions =
+    service.latitude != null && service.longitude != null
+      ? directionsUrl(service.latitude, service.longitude)
       : null;
 
-  const open = (url: string) => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    openLink(url);
-  };
-
   const shareService = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const address = [service.address, service.suburb, service.state, service.postcode]
       .filter(Boolean)
       .join(', ');
@@ -98,48 +107,87 @@ function ServiceDetailContent({ service, distanceMeters }: { service: Service; d
 
   return (
     <BottomSheetScrollView contentContainerStyle={styles.body}>
-      <View style={[styles.heroBand, { backgroundColor: color + '14' }]}>
-        <View style={[styles.heroIcon, { backgroundColor: color + '22', borderColor: color + '55' }]}>
+      <View style={[styles.heroBand, { backgroundColor: tint(color, 'faint') }]}>
+        <View
+          style={[
+            styles.heroIcon,
+            { backgroundColor: tint(color, 'soft'), borderColor: tint(color, 'strong') },
+          ]}
+        >
           <Ionicons name="business-outline" size={30} color={color} />
         </View>
-        <Text style={styles.name}>{service.name}</Text>
+        <Text style={styles.name} accessibilityRole="header">
+          {service.name}
+        </Text>
+        {/* One pill grammar in the hero: identical height and type,
+            differentiated by fill only. Category text is deep-on-tint, never
+            white on raw colour. */}
         <View style={styles.badges}>
-          <View style={[styles.badge, { backgroundColor: color }]}>
-            <Text style={styles.badgeText}>{catLabel(service.category)}</Text>
+          <View style={[styles.badge, { backgroundColor: tint(color, 'soft') }]}>
+            <Text style={[styles.badgeText, { color: deep }]}>{catLabel(service.category)}</Text>
           </View>
-          <View style={[styles.readyBadge, readyBg(r.key)]}>
-            <View style={[styles.dot, readyDot(r.key)]} />
-            <Text style={[styles.readyText, readyColor(r.key)]}>{r.label}</Text>
-          </View>
+          <ReadinessPill service={service} />
           {distanceMeters != null ? (
             <View style={styles.distChip}>
-              <Ionicons name="navigate-outline" size={12} color={theme.colors.accent} />
+              <Ionicons name="navigate-outline" size={11} color={theme.colors.accentDeep} />
               <Text style={styles.distText}>{formatDistance(distanceMeters)} away</Text>
             </View>
           ) : null}
         </View>
       </View>
 
+      {/* Call is the hero action, full width. Everything else is a tidy
+          two-per-row grid instead of a ragged flex wrap. */}
       <View style={styles.actions}>
         {service.phone ? (
-          <ActionButton
+          <Button
             icon="call"
             label={`Call ${service.phone}`}
-            primary
+            haptic={haptics.call}
             fullWidth
-            onPress={() => open(telUrl(service.phone!))}
+            onPress={() => openLink(telUrl(service.phone!))}
           />
         ) : null}
-        {directionsUrl ? (
-          <ActionButton icon="navigate" label="Directions" onPress={() => open(directionsUrl)} />
-        ) : null}
-        {service.website ? (
-          <ActionButton icon="globe" label="Website" onPress={() => open(webUrl(service.website))} />
-        ) : null}
-        {service.email ? (
-          <ActionButton icon="mail" label="Email" onPress={() => open(`mailto:${service.email}`)} />
-        ) : null}
-        <ActionButton icon="share-outline" label="Share" onPress={shareService} />
+        <View style={styles.actionGrid}>
+          {directions ? (
+            <Button
+              icon="navigate"
+              label="Directions"
+              variant="secondary"
+              haptic={haptics.call}
+              style={styles.gridBtn}
+              onPress={() => openLink(directions)}
+            />
+          ) : null}
+          {service.website ? (
+            <Button
+              icon="globe"
+              label="Website"
+              variant="secondary"
+              haptic={haptics.call}
+              style={styles.gridBtn}
+              onPress={() => openLink(webUrl(service.website))}
+            />
+          ) : null}
+          {service.email ? (
+            <Button
+              icon="mail"
+              label="Email"
+              variant="secondary"
+              haptic={haptics.call}
+              style={styles.gridBtn}
+              onPress={() => openLink(`mailto:${service.email}`)}
+            />
+          ) : null}
+          <Button
+            icon="share-outline"
+            label="Share"
+            variant="secondary"
+            haptic={haptics.navigate}
+            style={styles.gridBtn}
+            onPress={shareService}
+          />
+        </View>
       </View>
 
       {service.description ? <Description text={service.description} /> : null}
@@ -203,7 +251,8 @@ function Description({ text }: { text: string }) {
             void Haptics.selectionAsync();
             setExpanded((e) => !e);
           }}
-          hitSlop={8}
+          hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
+          style={styles.descToggleRow}
           accessibilityRole="button"
           accessibilityLabel={expanded ? 'Show less of the description' : 'Read the full description'}
         >
@@ -214,46 +263,12 @@ function Description({ text }: { text: string }) {
   );
 }
 
-function ActionButton({
-  icon,
-  label,
-  onPress,
-  primary,
-  fullWidth,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-  primary?: boolean;
-  fullWidth?: boolean;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionBtn,
-        primary ? styles.actionPrimary : styles.actionSecondary,
-        fullWidth && styles.actionFullWidth,
-        pressed && { opacity: 0.7 },
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <Ionicons name={icon} size={18} color={primary ? '#fff' : theme.colors.primaryDeep} />
-      <Text
-        style={[styles.actionLabel, primary ? styles.actionLabelPrimary : styles.actionLabelSecondary]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionTitle} accessibilityRole="header">
+        {title}
+      </Text>
       {children}
     </View>
   );
@@ -300,23 +315,6 @@ function trustSummary(s: Service): string {
   return `This listing comes from ${org}.${agePart} Call ahead to check before visiting.`;
 }
 
-// Stale data gets caution amber, never danger red; red is reserved for 000.
-function readyBg(k: 'ready' | 'verify' | 'low') {
-  return {
-    backgroundColor: k === 'ready' ? theme.colors.successMuted : theme.colors.warningMuted,
-  };
-}
-function readyColor(k: 'ready' | 'verify' | 'low') {
-  return {
-    color: k === 'ready' ? theme.colors.successText : theme.colors.warningText,
-  };
-}
-function readyDot(k: 'ready' | 'verify' | 'low') {
-  return {
-    backgroundColor: k === 'ready' ? theme.colors.success : theme.colors.warning,
-  };
-}
-
 const styles = StyleSheet.create({
   sheetBg: {
     backgroundColor: theme.colors.surfaceWarm,
@@ -331,8 +329,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.lg,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    borderBottomLeftRadius: theme.radius.xl,
+    borderBottomRightRadius: theme.radius.xl,
     marginBottom: theme.spacing.lg,
   },
   heroIcon: {
@@ -345,55 +343,37 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   name: { ...theme.type.title2, color: theme.colors.text, marginBottom: theme.spacing.sm },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  badge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: theme.radius.pill },
-  badgeText: { ...theme.type.caption, color: '#fff' },
-  readyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: theme.radius.pill,
-  },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  readyText: { ...theme.type.caption },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: theme.radius.pill },
+  badgeText: { ...theme.type.caption },
   distChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: theme.radius.pill,
     backgroundColor: theme.colors.surface,
   },
   distText: { ...theme.type.caption, color: theme.colors.accentDeep },
+
   descWrap: { marginBottom: theme.spacing.xl },
-  desc: { ...theme.type.body, color: theme.colors.textSecondary, lineHeight: 25 },
+  desc: { ...theme.type.body, color: theme.colors.textSecondary },
   descMeasure: { position: 'absolute', left: 0, right: 0, opacity: 0, zIndex: -1 },
+  descToggleRow: { minHeight: 32, justifyContent: 'center' },
   descToggle: { ...theme.type.callout, fontWeight: '600', color: theme.colors.primaryDeep, marginTop: 6 },
 
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, marginBottom: theme.spacing.xl },
-  actionBtn: {
+  actions: { gap: theme.spacing.sm, marginBottom: theme.spacing.xl },
+  actionGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: theme.radius.pill,
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
-  actionPrimary: { backgroundColor: theme.colors.primary, ...theme.shadow },
-  actionSecondary: {
-    backgroundColor: theme.colors.primaryMuted,
-    borderWidth: 1,
-    borderColor: 'rgba(47,109,84,0.18)',
+  gridBtn: {
+    flexBasis: '48%',
     flexGrow: 1,
-    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.md,
   },
-  actionFullWidth: { flexBasis: '100%', justifyContent: 'center' },
-  actionLabel: { ...theme.type.callout, fontWeight: '600' },
-  actionLabelPrimary: { color: '#fff' },
-  actionLabelSecondary: { color: theme.colors.primaryDeep },
 
   section: {
     marginBottom: theme.spacing.lg,
@@ -404,15 +384,13 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
   },
   sectionTitle: {
-    ...theme.type.caption,
+    ...theme.type.eyebrow,
     color: theme.colors.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
     marginBottom: theme.spacing.sm,
   },
   field: { flexDirection: 'row', gap: theme.spacing.md, paddingVertical: 6 },
   fieldLabel: { ...theme.type.caption, color: theme.colors.textSecondary, marginBottom: 1 },
-  fieldValue: { ...theme.type.callout, color: theme.colors.text, lineHeight: 22 },
+  fieldValue: { ...theme.type.callout, color: theme.colors.text },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -423,7 +401,7 @@ const styles = StyleSheet.create({
   rowLabel: { ...theme.type.subhead, color: theme.colors.textSecondary },
   rowValue: { ...theme.type.subhead, color: theme.colors.text, fontWeight: '500' },
 
-  trustText: { ...theme.type.subhead, color: theme.colors.text, lineHeight: 21 },
+  trustText: { ...theme.type.subhead, color: theme.colors.text },
   trustRows: { marginTop: theme.spacing.sm },
   sourceLicense: { ...theme.type.footnote, color: theme.colors.textTertiary, marginTop: theme.spacing.sm },
 });

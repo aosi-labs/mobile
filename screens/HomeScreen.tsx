@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useEffect } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
+  PixelRatio,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -9,11 +12,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { EmuMark } from '../components/EmuMascot';
 import { PressableScale } from '../components/PressableScale';
+import { cardEntering } from '../lib/motion';
 import { NEEDS, type Need } from '../lib/needs';
-import { theme } from '../lib/theme';
+import { theme, tint } from '../lib/theme';
 import type { UserLocationState } from '../hooks/useUserLocation';
 
 function timeGreeting(): string {
@@ -37,6 +41,7 @@ type Props = {
   onLocationPress: () => void;
   onInfoPress: () => void;
   onCrisisPress: () => void;
+  onRetry: () => void;
 };
 
 export function HomeScreen({
@@ -52,23 +57,33 @@ export function HomeScreen({
   onLocationPress,
   onInfoPress,
   onCrisisPress,
+  onRetry,
 }: Props) {
   const locationLabel =
     location.placeLabel ??
     (location.postcode ? `Near ${location.postcode}` : null);
 
+  // Low-vision users running large text get a single-column grid with
+  // unclamped descriptions; "safety at home" must never truncate.
+  const largeType = PixelRatio.getFontScale() > 1.4;
+
   // Only claim services are "saved" when a completed sync proves SQLite holds
-  // them; partially streamed first-run rows live in memory only.
+  // them; partially streamed first-run rows live in memory only. Hedged
+  // copy: we know the fetch failed, not that the person is offline.
   const offlineLine = error
     ? serviceCount > 0
       ? lastSynced
-        ? `Offline. Using services saved ${new Date(lastSynced).toLocaleDateString('en-AU', {
+        ? `Can't reach the service list right now. Using services saved ${new Date(lastSynced).toLocaleDateString('en-AU', {
             day: 'numeric',
             month: 'short',
           })}.`
-        : 'Offline. Showing what loaded so far, not yet saved to your phone.'
-      : 'Offline. Crisis lines below still work.'
+        : "Can't reach the service list right now. Showing what loaded so far."
+      : "Can't reach the service list right now. Crisis lines below still work."
     : null;
+
+  useEffect(() => {
+    if (offlineLine) AccessibilityInfo.announceForAccessibility(offlineLine);
+  }, [offlineLine]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -83,43 +98,57 @@ export function HomeScreen({
             </View>
             <Text style={styles.wordmark}>aosi</Text>
           </View>
-          {isSyncing ? (
-            <View style={styles.syncBadge}>
-              <ActivityIndicator size="small" color={theme.colors.primaryDeep} />
-              {syncProgress > 0 ? (
-                <Text style={styles.syncText}>
-                  {syncTotal
-                    ? `${syncProgress.toLocaleString()} of ${syncTotal.toLocaleString()}`
-                    : syncProgress.toLocaleString()}
-                </Text>
-              ) : null}
-            </View>
-          ) : (
+          {/* The About button never disappears: a wary first-run user must be
+              able to reach the privacy copy while the first sync runs. */}
+          <View style={styles.topActions}>
+            {isSyncing ? (
+              <View
+                style={styles.syncBadge}
+                accessible
+                accessibilityLabel={`Saving services to your phone${
+                  syncProgress > 0 && syncTotal
+                    ? `, ${syncProgress.toLocaleString()} of ${syncTotal.toLocaleString()}`
+                    : ''
+                }`}
+                accessibilityLiveRegion="polite"
+              >
+                <ActivityIndicator size="small" color={theme.colors.primaryDeep} />
+                {syncProgress > 0 ? (
+                  <Text style={styles.syncText}>
+                    {syncTotal
+                      ? `${syncProgress.toLocaleString()} of ${syncTotal.toLocaleString()}`
+                      : syncProgress.toLocaleString()}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
             <Pressable
               onPress={() => {
                 void Haptics.selectionAsync();
                 onInfoPress();
               }}
               hitSlop={12}
-              style={styles.infoBtn}
+              style={({ pressed }) => [styles.infoBtn, pressed && { opacity: theme.pressedOpacity }]}
               accessibilityRole="button"
               accessibilityLabel="About aosi"
               accessibilityHint="Opens information, privacy details, and source links"
             >
               <Ionicons name="information-circle-outline" size={22} color={theme.colors.textSecondary} />
             </Pressable>
-          )}
+          </View>
         </View>
 
         <Text style={styles.greeting}>{timeGreeting()}</Text>
-        <Text style={styles.title}>What do you need{'\n'}help with?</Text>
+        <Text style={styles.title} accessibilityRole="header">
+          What do you need{'\n'}help with?
+        </Text>
 
         <Pressable
           onPress={() => {
             void Haptics.selectionAsync();
             onLocationPress();
           }}
-          style={({ pressed }) => [styles.locationRow, pressed && { opacity: 0.7 }]}
+          style={({ pressed }) => [styles.locationRow, pressed && { opacity: theme.pressedOpacity }]}
           accessibilityRole="button"
           accessibilityLabel={locationLabel ? `Location: ${locationLabel}. Change location` : 'Set your location'}
         >
@@ -135,22 +164,30 @@ export function HomeScreen({
         </Pressable>
 
         {offlineLine ? (
-          <View style={styles.offlineRow}>
+          <Pressable
+            onPress={() => {
+              void Haptics.selectionAsync();
+              onRetry();
+            }}
+            style={({ pressed }) => [styles.offlineRow, pressed && { opacity: theme.pressedOpacity }]}
+            accessibilityRole="button"
+            accessibilityLabel={`${offlineLine} Tap to try again.`}
+          >
             <Ionicons name="cloud-offline-outline" size={13} color={theme.colors.textSecondary} />
-            <Text style={styles.offlineText}>{offlineLine}</Text>
-          </View>
+            <Text style={styles.offlineText}>
+              {offlineLine} <Text style={styles.offlineRetry}>Tap to try again.</Text>
+            </Text>
+          </Pressable>
         ) : null}
 
         <View style={styles.grid}>
           {NEEDS.map((need, i) => (
             <Animated.View
               key={need.key}
-              style={styles.gridItem}
-              entering={FadeInDown.delay(i * 40)
-                .duration(320)
-                .reduceMotion(ReduceMotion.System)}
+              style={largeType ? styles.gridItemFull : styles.gridItem}
+              entering={cardEntering(i)}
             >
-              <NeedCard need={need} onPress={() => onPickNeed(need)} />
+              <NeedCard need={need} onPress={() => onPickNeed(need)} clampSub={!largeType} />
             </Animated.View>
           ))}
         </View>
@@ -177,12 +214,13 @@ export function HomeScreen({
         <PressableScale
           onPress={onCrisisPress}
           scaleTo={0.98}
+          haptic="light"
           style={styles.crisisBar}
           accessibilityRole="button"
           accessibilityLabel="Need to talk to someone right now? Free crisis lines, 24 hours a day"
         >
           <View style={styles.crisisIcon}>
-            <Ionicons name="call" size={16} color="#fff" />
+            <Ionicons name="call" size={16} color={theme.colors.textOnPrimary} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.crisisTitle}>Need to talk to someone now?</Text>
@@ -195,7 +233,15 @@ export function HomeScreen({
   );
 }
 
-function NeedCard({ need, onPress }: { need: Need; onPress: () => void }) {
+function NeedCard({
+  need,
+  onPress,
+  clampSub,
+}: {
+  need: Need;
+  onPress: () => void;
+  clampSub: boolean;
+}) {
   return (
     <PressableScale
       onPress={onPress}
@@ -204,11 +250,11 @@ function NeedCard({ need, onPress }: { need: Need; onPress: () => void }) {
       accessibilityLabel={need.label}
       accessibilityHint={need.sub}
     >
-      <View style={[styles.needIcon, { backgroundColor: need.color + '1C' }]}>
+      <View style={[styles.needIcon, { backgroundColor: tint(need.color, 'faint') }]}>
         <Ionicons name={need.icon} size={20} color={need.color} />
       </View>
       <Text style={styles.needLabel}>{need.label}</Text>
-      <Text style={styles.needSub} numberOfLines={2}>
+      <Text style={styles.needSub} numberOfLines={clampSub ? 2 : undefined}>
         {need.sub}
       </Text>
     </PressableScale>
@@ -218,7 +264,7 @@ function NeedCard({ need, onPress }: { need: Need; onPress: () => void }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.bg },
   scroll: {
-    paddingHorizontal: theme.spacing.xl,
+    paddingHorizontal: theme.layout.gutter,
     paddingBottom: theme.spacing.lg,
   },
 
@@ -234,13 +280,14 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: theme.colors.cream,
+    backgroundColor: theme.colors.surfaceWarm,
     borderWidth: 1,
     borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   wordmark: { ...theme.type.headline, color: theme.colors.text, letterSpacing: 0.5 },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   infoBtn: {
     width: 34,
     height: 34,
@@ -263,13 +310,12 @@ const styles = StyleSheet.create({
   greeting: { ...theme.type.subhead, color: theme.colors.textSecondary, marginBottom: 4 },
   title: {
     ...theme.type.largeTitle,
-    fontSize: 32,
-    lineHeight: 38,
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
   },
 
   locationRow: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
@@ -290,6 +336,7 @@ const styles = StyleSheet.create({
     rowGap: theme.spacing.md,
   },
   gridItem: { width: '48.2%' },
+  gridItemFull: { width: '100%' },
   needCard: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.lg,
@@ -302,13 +349,13 @@ const styles = StyleSheet.create({
   needIcon: {
     width: 40,
     height: 40,
-    borderRadius: 13,
+    borderRadius: theme.radius.tile,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.sm,
   },
   needLabel: { ...theme.type.headline, color: theme.colors.text, marginBottom: 2 },
-  needSub: { ...theme.type.footnote, color: theme.colors.textSecondary, lineHeight: 17 },
+  needSub: { ...theme.type.footnote, color: theme.colors.textSecondary },
 
   elseCard: {
     flexDirection: 'row',
@@ -326,7 +373,7 @@ const styles = StyleSheet.create({
   elseIcon: {
     width: 40,
     height: 40,
-    borderRadius: 13,
+    borderRadius: theme.radius.tile,
     backgroundColor: theme.colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
@@ -335,16 +382,18 @@ const styles = StyleSheet.create({
   elseSub: { ...theme.type.footnote, color: theme.colors.textSecondary, marginTop: 1 },
 
   offlineRow: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     marginTop: -10,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
   },
-  offlineText: { ...theme.type.footnote, color: theme.colors.textSecondary },
+  offlineText: { ...theme.type.footnote, color: theme.colors.textSecondary, flex: 1 },
+  offlineRetry: { fontWeight: '700', color: theme.colors.primaryDeep },
 
   crisisWrap: {
-    paddingHorizontal: theme.spacing.xl,
+    paddingHorizontal: theme.layout.gutter,
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.sm,
   },
@@ -354,7 +403,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     backgroundColor: theme.colors.accentMuted,
     borderWidth: 1,
-    borderColor: 'rgba(217,119,66,0.30)',
+    borderColor: theme.colors.borderAccentSubtle,
     borderRadius: theme.radius.lg,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
@@ -368,5 +417,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   crisisTitle: { ...theme.type.subhead, fontWeight: '700', color: theme.colors.accentDeep },
-  crisisSub: { ...theme.type.caption, fontWeight: '500', color: theme.colors.accentDeep, marginTop: 1, opacity: 0.85 },
+  // Full accentDeep, no opacity hack: 5.03:1 on the ochre wash (AA).
+  crisisSub: { ...theme.type.caption, fontWeight: '500', color: theme.colors.accentDeep, marginTop: 1 },
 });

@@ -11,22 +11,20 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { useReducedMotion } from '../lib/motion';
+import { type HapticIntent, useReducedMotion } from '../lib/motion';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-type HapticKind = 'selection' | 'light' | 'medium' | 'none';
 
 type Props = Omit<PressableProps, 'children' | 'style'> & {
   style?: StyleProp<ViewStyle>;
   scaleTo?: number;
-  haptic?: HapticKind;
+  haptic?: HapticIntent;
   children?: ReactNode;
 };
 
 const SPRING = { damping: 18, stiffness: 320, mass: 0.6 };
 
-function fireHaptic(kind: HapticKind) {
+function fireHaptic(kind: HapticIntent) {
   if (kind === 'selection') void Haptics.selectionAsync();
   else if (kind === 'light') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   else if (kind === 'medium') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -37,6 +35,8 @@ export function PressableScale({
   scaleTo = 0.97,
   haptic = 'selection',
   onPress,
+  onPressIn,
+  onPressOut,
   children,
   ...rest
 }: Props) {
@@ -51,11 +51,13 @@ export function PressableScale({
     <AnimatedPressable
       {...rest}
       style={[style, animatedStyle]}
-      onPressIn={() => {
+      onPressIn={(e) => {
         scale.value = withSpring(reducedMotion ? 1 : scaleTo, SPRING);
+        onPressIn?.(e);
       }}
-      onPressOut={() => {
+      onPressOut={(e) => {
         scale.value = withSpring(1, SPRING);
+        onPressOut?.(e);
       }}
       onPress={(e) => {
         fireHaptic(haptic);

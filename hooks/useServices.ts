@@ -33,11 +33,12 @@ export function useServices(): ServicesState {
   const [syncTotal, setSyncTotal] = useState<number | null>(null);
   const [lastSynced, setLastSyncedState] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const syncingRef = useRef(false);
+  // Holds the in-flight sync so a second caller joins it instead of being
+  // dropped. A pull-to-refresh landing during a background sync must not
+  // silently no-op: the spinner has to stay up until real work finishes.
+  const inFlightRef = useRef<Promise<void> | null>(null);
 
-  const sync = useCallback(async () => {
-    if (syncingRef.current) return;
-    syncingRef.current = true;
+  const runSync = useCallback(async () => {
     setIsSyncing(true);
     setSyncProgress(0);
     setError(null);
@@ -77,10 +78,17 @@ export function useServices(): ServicesState {
       const msg = e instanceof Error ? e.message : 'Sync failed';
       setError(msg);
     } finally {
-      syncingRef.current = false;
+      inFlightRef.current = null;
       setIsSyncing(false);
     }
   }, []);
+
+  const sync = useCallback((): Promise<void> => {
+    if (inFlightRef.current) return inFlightRef.current;
+    const run = runSync();
+    inFlightRef.current = run;
+    return run;
+  }, [runSync]);
 
   useEffect(() => {
     let cancelled = false;

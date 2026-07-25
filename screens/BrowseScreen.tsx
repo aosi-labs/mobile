@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  Keyboard,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -11,14 +12,22 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
+import Animated, {
+  ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import MapView, { Marker, type Region } from 'react-native-maps';
-import { EmuMascot } from '../components/EmuMascot';
+import { Button } from '../components/Button';
+import { CategoryMarker } from '../components/CategoryMarker';
+import { CrisisLink } from '../components/CrisisLink';
+import { EmptyState } from '../components/EmptyState';
 import { IntentStrip } from '../components/IntentStrip';
 import { ServiceCard } from '../components/ServiceCard';
 import { SkeletonList } from '../components/SkeletonList';
-import { catColor } from '../lib/constants';
 import { distanceMetres } from '../lib/geo';
+import { cardEntering, MOTION } from '../lib/motion';
 import { needByKey } from '../lib/needs';
 import { theme } from '../lib/theme';
 import type { Service } from '../lib/types';
@@ -32,7 +41,7 @@ const INITIAL_REGION: Region = {
 };
 const NEAR_REGION_DELTA = 1.0;
 const MAX_MARKERS = 400;
-const LIST_LIMIT = 200;
+const LIST_PAGE = 200;
 const ENTRANCE_COUNT = 12;
 
 type ViewMode = 'list' | 'map';
@@ -66,33 +75,82 @@ export function BrowseScreen({
 }: Props) {
   const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState('');
-  const [activeIntent, setActiveIntent] = useState<string | null>(initialCategory);
+  // Chips emit category keys; a need key from Results maps through its need.
+  const [activeCategory, setActiveCategory] = useState<string | null>(
+    initialCategory ? needByKey(initialCategory)?.category ?? initialCategory : null,
+  );
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [listLimit, setListLimit] = useState(LIST_PAGE);
+  // Pull-to-refresh spinner tracks the user's own pull, never the automatic
+  // background sync.
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  // The map mounts on first use, then stays mounted so toggling never
+  // cold-starts MapView again (region and scroll position both survive).
+  const [mapMounted, setMapMounted] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setQuery(searchInput.trim()), 250);
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const intentCategory = useMemo(
-    () => (activeIntent ? needByKey(activeIntent)?.category ?? null : null),
-    [activeIntent],
-  );
+  useEffect(() => {
+    setListLimit(LIST_PAGE);
+  }, [query, activeCategory]);
 
-  const filtered = useMemo(() => {
-    const needle = query.toLowerCase();
-    return services.filter((s) => {
-      if (intentCategory && s.category !== intentCategory) return false;
-      if (!needle) return true;
-      return (
-        (s.name || '').toLowerCase().includes(needle) ||
-        (s.description || '').toLowerCase().includes(needle) ||
-        (s.suburb || '').toLowerCase().includes(needle) ||
-        (s.address || '').toLowerCase().includes(needle) ||
-        (s.postcode || '').toLowerCase().includes(needle)
-      );
+  // The list owns keyboardDismissMode, so once it is faded out the keyboard
+  // would sit over the bottom half of the map with no way to dismiss it.
+  const mapProgress = useSharedValue(0);
+  useEffect(() => {
+    if (viewMode === 'map') {
+      setMapMounted(true);
+      Keyboard.dismiss();
+    }
+    mapProgress.value = withTiming(viewMode === 'map' ? 1 : 0, {
+      duration: MOTION.crossfade,
+      reduceMotion: ReduceMotion.System,
     });
-  }, [services, query, intentCategory]);
+  }, [viewMode, mapProgress]);
+
+  // Entrance choreography belongs to the first load only. renderItem re-runs
+  // on every cell mount, so without this the top rows re-stagger whenever
+  // they scroll back into the virtualization window or a filter changes.
+  const entranceDone = useRef(false);
+  useEffect(() => {
+    const t = setTimeout(
+      () => {
+        entranceDone.current = true;
+      },
+      (ENTRANCE_COUNT - 1) * MOTION.stagger + MOTION.entrance,
+    );
+    return () => clearTimeout(t);
+  }, []);
+  const listLayerStyle = useAnimatedStyle(() => ({ opacity: 1 - mapProgress.value }));
+  const mapLayerStyle = useAnimatedStyle(() => ({ opacity: mapProgress.value }));
+
+  // One lowercase haystack per service, built once per dataset, so typing
+  // doesn't re-lowercase five fields across 24.5k records per keystroke.
+  const haystacks = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of services) {
+      m.set(
+        s.id,
+        `${s.name || ''} ${s.description || ''} ${s.suburb || ''} ${s.address || ''} ${s.postcode || ''}`.toLowerCase(),
+      );
+    }
+    return m;
+  }, [services]);
+
+  // Tokenised AND search: "food bank sydney" matches records containing all
+  // three words anywhere, not the exact phrase.
+  const filtered = useMemo(() => {
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+    return services.filter((s) => {
+      if (activeCategory && s.category !== activeCategory) return false;
+      if (tokens.length === 0) return true;
+      const hay = haystacks.get(s.id) ?? '';
+      return tokens.every((t) => hay.includes(t));
+    });
+  }, [services, query, activeCategory, haystacks]);
 
   const ranked = useMemo(() => {
     if (!location.coords) return filtered.map((s) => ({ service: s, distance: null as number | null }));
@@ -112,15 +170,12 @@ export function BrowseScreen({
       });
   }, [filtered, location.coords]);
 
-  const mapMarkers = useMemo(() => {
-    const out: Service[] = [];
-    for (const { service: s } of ranked) {
-      if (s.latitude == null || s.longitude == null) continue;
-      out.push(s);
-      if (out.length >= MAX_MARKERS) break;
-    }
-    return out;
-  }, [ranked]);
+  const geocoded = useMemo(
+    () => ranked.filter(({ service: s }) => s.latitude != null && s.longitude != null),
+    [ranked],
+  );
+  const mapMarkers = useMemo(() => geocoded.slice(0, MAX_MARKERS), [geocoded]);
+  const pinless = filtered.length - geocoded.length;
 
   const mapRegion = useMemo<Region>(() => {
     if (location.coords) {
@@ -137,6 +192,31 @@ export function BrowseScreen({
   const locationLabel =
     location.placeLabel ?? (location.postcode ? `Near ${location.postcode}` : 'Set location');
 
+  const onPullRefresh = async () => {
+    setIsPullRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setIsPullRefreshing(false);
+    }
+  };
+
+  const showSkeleton = isLoading || (services.length === 0 && isSyncing);
+
+  const openMarker = (s: Service) => {
+    void Haptics.selectionAsync();
+    const dist =
+      location.coords && s.latitude != null && s.longitude != null
+        ? distanceMetres(
+            location.coords.latitude,
+            location.coords.longitude,
+            s.latitude,
+            s.longitude,
+          )
+        : null;
+    onOpenDetail(s, dist);
+  };
+
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.header}>
@@ -147,7 +227,7 @@ export function BrowseScreen({
               onBack();
             }}
             hitSlop={10}
-            style={styles.backBtn}
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: theme.pressedOpacity }]}
             accessibilityRole="button"
             accessibilityLabel="Back"
           >
@@ -169,7 +249,7 @@ export function BrowseScreen({
           </View>
         </View>
 
-        <IntentStrip active={activeIntent} onChange={setActiveIntent} />
+        <IntentStrip active={activeCategory} onChange={setActiveCategory} />
 
         <View style={styles.metaRow}>
           <Pressable
@@ -177,7 +257,7 @@ export function BrowseScreen({
               void Haptics.selectionAsync();
               onLocationPress();
             }}
-            style={({ pressed }) => [styles.locationChip, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [styles.locationChip, pressed && { opacity: theme.pressedOpacity }]}
             accessibilityRole="button"
             accessibilityLabel={`Location: ${locationLabel}. Change location`}
           >
@@ -187,141 +267,175 @@ export function BrowseScreen({
             </Text>
             <Ionicons name="chevron-down" size={11} color={theme.colors.primaryDeep} />
           </Pressable>
-          <Text style={styles.countText}>
-            {filtered.length.toLocaleString()} {filtered.length === 1 ? 'service' : 'services'}
-          </Text>
+          <CrisisLink variant="pill" label="Crisis lines" onPress={onCrisisPress} style={styles.crisisPill} />
           <View style={styles.viewToggle}>
             <ToggleBtn
               icon="list"
-              label="List"
+              label="List view"
               active={viewMode === 'list'}
-              onPress={() => {
-                void Haptics.selectionAsync();
-                setViewMode('list');
-              }}
+              onPress={() => setViewMode('list')}
             />
             <ToggleBtn
               icon="map"
-              label="Map"
+              label="Map view"
               active={viewMode === 'map'}
-              onPress={() => {
-                void Haptics.selectionAsync();
-                setViewMode('map');
-              }}
+              onPress={() => setViewMode('map')}
             />
           </View>
         </View>
-
-        <Pressable
-          onPress={() => {
-            void Haptics.selectionAsync();
-            onCrisisPress();
-          }}
-          style={({ pressed }) => [styles.crisisLink, pressed && { opacity: 0.7 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Urgent? Free 24/7 crisis lines"
-        >
-          <Text style={styles.crisisLinkText}>Urgent? Free 24/7 crisis lines</Text>
-        </Pressable>
       </View>
 
-      {viewMode === 'map' ? (
-        <View style={styles.mapBody}>
-          <MapView
-            style={StyleSheet.absoluteFill}
-            initialRegion={mapRegion}
-            showsUserLocation={location.status === 'granted' && location.source === 'gps'}
+      <View style={styles.bodyWrap}>
+        <Animated.View
+          style={[styles.listLayer, listLayerStyle]}
+          pointerEvents={viewMode === 'list' ? 'auto' : 'none'}
+          accessibilityElementsHidden={viewMode !== 'list'}
+          importantForAccessibility={viewMode === 'list' ? 'auto' : 'no-hide-descendants'}
+        >
+          <FlatList
+            style={styles.listBody}
+            data={ranked.slice(0, listLimit)}
+            keyExtractor={(item) => item.service.id}
+            renderItem={({ item, index }) => (
+              <Animated.View
+                entering={
+                  !entranceDone.current && index < ENTRANCE_COUNT ? cardEntering(index) : undefined
+                }
+              >
+                <ServiceCard
+                  service={item.service}
+                  distanceMeters={item.distance}
+                  onPress={() => onOpenDetail(item.service, item.distance)}
+                />
+              </Animated.View>
+            )}
+            // No "0 services" headline above pulsing skeletons: while we are
+            // still finding services, saying zero reads as "nothing exists".
+            ListHeaderComponent={
+              showSkeleton ? null : (
+                <Text style={styles.countText} accessibilityLiveRegion="polite">
+                  {filtered.length.toLocaleString()} {filtered.length === 1 ? 'service' : 'services'}
+                </Text>
+              )
+            }
+            ListEmptyComponent={
+              showSkeleton ? (
+                <SkeletonList />
+              ) : (
+                <EmptyState
+                  variant={error && services.length === 0 ? 'concerned' : 'searching'}
+                  title={
+                    error && services.length === 0
+                      ? "Couldn't load services"
+                      : query || activeCategory
+                        ? 'No matches'
+                        : 'No services'
+                  }
+                  body={
+                    error && services.length === 0
+                      ? "Can't reach the service list right now. Crisis lines still work, and any services already saved to your phone are still here."
+                      : query || activeCategory
+                        ? 'No worries. Try a different word, or clear the filters and start fresh.'
+                        : 'Pull down to refresh.'
+                  }
+                  actionLabel={
+                    error && services.length === 0
+                      ? 'Try again'
+                      : query || activeCategory
+                        ? 'Clear filters'
+                        : undefined
+                  }
+                  onAction={
+                    error && services.length === 0
+                      ? () => void refresh()
+                      : query || activeCategory
+                        ? () => {
+                            setSearchInput('');
+                            setActiveCategory(null);
+                          }
+                        : undefined
+                  }
+                  onCrisisPress={onCrisisPress}
+                />
+              )
+            }
+            ListFooterComponent={
+              ranked.length > listLimit ? (
+                <View style={styles.footer}>
+                  <Text style={styles.footerText}>
+                    Showing the {location.coords ? 'closest' : 'first'} {listLimit.toLocaleString()} of{' '}
+                    {ranked.length.toLocaleString()}.{' '}
+                    {query
+                      ? 'Try a more specific search.'
+                      : 'Set a location or search to narrow this down.'}
+                  </Text>
+                  <Button
+                    label={`Show ${LIST_PAGE} more`}
+                    variant="secondary"
+                    onPress={() => setListLimit((n) => n + LIST_PAGE)}
+                    style={styles.showMoreBtn}
+                  />
+                </View>
+              ) : (
+                <View style={{ height: 24 }} />
+              )
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={isPullRefreshing}
+                onRefresh={() => void onPullRefresh()}
+                tintColor={theme.colors.primary}
+              />
+            }
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          />
+        </Animated.View>
+
+        {mapMounted ? (
+          <Animated.View
+            style={[StyleSheet.absoluteFill, mapLayerStyle]}
+            pointerEvents={viewMode === 'map' ? 'auto' : 'none'}
+            accessibilityElementsHidden={viewMode !== 'map'}
+            importantForAccessibility={viewMode === 'map' ? 'auto' : 'no-hide-descendants'}
           >
-            {mapMarkers.map((s) => (
-              <Marker
-                key={s.id}
-                coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
-                pinColor={catColor(s.category)}
-                title={s.name}
-                description={s.suburb}
-                onPress={() => {
-                  void Haptics.selectionAsync();
-                  const dist =
-                    location.coords && s.latitude != null && s.longitude != null
-                      ? distanceMetres(
-                          location.coords.latitude,
-                          location.coords.longitude,
-                          s.latitude,
-                          s.longitude,
-                        )
-                      : null;
-                  onOpenDetail(s, dist);
-                }}
-              />
-            ))}
-          </MapView>
-          {filtered.length > MAX_MARKERS ? (
-            <View style={styles.zoomHint}>
-              <Ionicons name="information-circle" size={14} color="#fff" />
-              <Text style={styles.zoomHintText}>
-                Showing the {location.coords ? 'closest' : 'first'} {MAX_MARKERS} of{' '}
-                {filtered.length.toLocaleString()}, refine your search
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <FlatList
-          style={styles.listBody}
-          data={ranked.slice(0, LIST_LIMIT)}
-          keyExtractor={(item) => item.service.id}
-          renderItem={({ item, index }) => (
-            <Animated.View
-              entering={
-                index < ENTRANCE_COUNT
-                  ? FadeInDown.delay(index * 45).reduceMotion(ReduceMotion.System)
-                  : undefined
-              }
+            <MapView
+              style={StyleSheet.absoluteFill}
+              initialRegion={mapRegion}
+              showsUserLocation={location.status === 'granted' && location.source === 'gps'}
             >
-              <ServiceCard
-                service={item.service}
-                distanceMeters={item.distance}
-                onPress={() => onOpenDetail(item.service, item.distance)}
-              />
-            </Animated.View>
-          )}
-          ListEmptyComponent={
-            isLoading || (services.length === 0 && isSyncing) ? (
-              <SkeletonList />
-            ) : (
-              <EmptyState
-                hasError={!!error && services.length === 0}
-                hasFilters={!!searchInput || !!activeIntent}
-                onClear={() => {
-                  setSearchInput('');
-                  setActiveIntent(null);
-                }}
-                onRetry={() => void refresh()}
-                onCrisisPress={onCrisisPress}
-              />
-            )
-          }
-          ListFooterComponent={
-            ranked.length > LIST_LIMIT ? (
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>
-                  Showing the {location.coords ? 'closest' : 'first'} {LIST_LIMIT} of{' '}
-                  {ranked.length.toLocaleString()}, refine your search.
+              {mapMarkers.map(({ service: s }) => (
+                <Marker
+                  key={s.id}
+                  coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
+                  tracksViewChanges={false}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  onPress={() => openMarker(s)}
+                >
+                  {/* Honest pins: postcode-centroid guesses render as dashed
+                      rings, not confident dots. */}
+                  <CategoryMarker category={s.category} precision={s.location_precision} />
+                </Marker>
+              ))}
+            </MapView>
+            {geocoded.length > MAX_MARKERS || pinless > 0 ? (
+              <View style={styles.zoomHint}>
+                <Ionicons name="information-circle" size={14} color={theme.colors.textOnPrimary} />
+                <Text style={styles.zoomHintText}>
+                  {geocoded.length > MAX_MARKERS
+                    ? `Showing the ${location.coords ? 'closest' : 'first'} ${MAX_MARKERS} of ${geocoded.length.toLocaleString()} pins. `
+                    : ''}
+                  {pinless > 0
+                    ? `${pinless.toLocaleString()} ${pinless === 1 ? 'service has' : 'services have'} no map pin. See the list.`
+                    : ''}
                 </Text>
               </View>
-            ) : (
-              <View style={{ height: 24 }} />
-            )
-          }
-          refreshControl={
-            <RefreshControl refreshing={isSyncing} onRefresh={() => void refresh()} tintColor={theme.colors.primary} />
-          }
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        />
-      )}
+            ) : null}
+          </Animated.View>
+        ) : null}
+      </View>
     </SafeAreaView>
   );
 }
@@ -339,70 +453,25 @@ function ToggleBtn({
 }) {
   return (
     <Pressable
-      onPress={onPress}
-      hitSlop={6}
-      style={({ pressed }) => [styles.toggleBtn, active && styles.toggleBtnActive, pressed && { opacity: 0.7 }]}
+      onPress={() => {
+        void Haptics.selectionAsync();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.toggleBtn,
+        active && styles.toggleBtnActive,
+        pressed && { opacity: theme.pressedOpacity },
+      ]}
       accessibilityRole="button"
-      accessibilityLabel={`${label} view`}
+      accessibilityLabel={label}
       accessibilityState={{ selected: active }}
     >
-      <Ionicons name={icon} size={14} color={active ? '#fff' : theme.colors.textSecondary} />
-      <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>{label}</Text>
+      <Ionicons
+        name={icon}
+        size={16}
+        color={active ? theme.colors.textOnPrimary : theme.colors.textSecondary}
+      />
     </Pressable>
-  );
-}
-
-function EmptyState({
-  hasError,
-  hasFilters,
-  onClear,
-  onRetry,
-  onCrisisPress,
-}: {
-  hasError: boolean;
-  hasFilters: boolean;
-  onClear: () => void;
-  onRetry: () => void;
-  onCrisisPress: () => void;
-}) {
-  return (
-    <View style={styles.empty}>
-      <View style={styles.emptyMascot}>
-        <EmuMascot size={130} variant={hasError ? 'concerned' : 'searching'} />
-      </View>
-      <Text style={styles.emptyTitle}>
-        {hasError ? "Couldn't load services" : hasFilters ? 'Nothing here yet' : 'No services'}
-      </Text>
-      <Text style={styles.emptyBody}>
-        {hasError
-          ? 'You might be offline. Crisis lines still work, and any services already saved to your phone are still here.'
-          : hasFilters
-          ? 'No worries. Try a different word, or clear the filters and start fresh.'
-          : 'Pull down to refresh.'}
-      </Text>
-      {hasError ? (
-        <Pressable style={styles.emptyBtn} onPress={onRetry}>
-          <Text style={styles.emptyBtnText}>Retry</Text>
-        </Pressable>
-      ) : hasFilters ? (
-        <Pressable style={styles.emptyBtn} onPress={onClear}>
-          <Text style={styles.emptyBtnText}>Clear filters</Text>
-        </Pressable>
-      ) : null}
-      {hasError ? (
-        <Pressable
-          onPress={() => {
-            void Haptics.selectionAsync();
-            onCrisisPress();
-          }}
-          style={({ pressed }) => [styles.emptyCrisisLink, pressed && { opacity: 0.7 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Urgent? Free 24/7 crisis lines"
-        >
-          <Text style={styles.crisisLinkText}>Urgent? Free 24/7 crisis lines</Text>
-        </Pressable>
-      ) : null}
-    </View>
   );
 }
 
@@ -419,13 +488,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.layout.gutter,
     paddingTop: theme.spacing.sm,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -434,6 +503,7 @@ const styles = StyleSheet.create({
   },
   searchWrap: {
     flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -450,10 +520,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.layout.gutter,
     paddingBottom: theme.spacing.sm,
   },
   locationChip: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -461,10 +532,19 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     backgroundColor: theme.colors.primaryMuted,
     borderRadius: theme.radius.pill,
-    flexShrink: 1,
+    flex: 1,
   },
   locationChipText: { ...theme.type.caption, color: theme.colors.primaryDeep, flexShrink: 1 },
-  countText: { ...theme.type.footnote, color: theme.colors.textSecondary, flex: 1 },
+  // The crisis pill keeps its intrinsic width; the location chip (which
+  // truncates) absorbs the slack. Reversed, the pill's label overflows into
+  // its neighbours on a 375pt screen.
+  crisisPill: { flexShrink: 0, paddingHorizontal: 10 },
+  countText: {
+    ...theme.type.footnote,
+    color: theme.colors.textSecondary,
+    paddingHorizontal: theme.layout.gutter,
+    paddingBottom: theme.spacing.sm,
+  },
   viewToggle: {
     flexDirection: 'row',
     backgroundColor: theme.colors.surfaceMuted,
@@ -475,18 +555,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   toggleBtn: {
-    flexDirection: 'row',
+    minWidth: 44,
+    minHeight: 38,
     alignItems: 'center',
-    gap: 5,
+    justifyContent: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 7,
     borderRadius: theme.radius.pill,
   },
   toggleBtnActive: { backgroundColor: theme.colors.primary },
-  toggleLabel: { ...theme.type.caption, color: theme.colors.textSecondary },
-  toggleLabelActive: { color: '#fff' },
 
-  mapBody: { flex: 1, position: 'relative' },
+  bodyWrap: { flex: 1 },
+  listLayer: { flex: 1 },
   listBody: { flex: 1 },
   listContent: { paddingTop: theme.spacing.sm, paddingBottom: 32 },
   zoomHint: {
@@ -498,43 +577,18 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: 'rgba(43,38,32,0.88)',
+    backgroundColor: theme.colors.scrim,
     borderRadius: theme.radius.pill,
     maxWidth: '86%',
   },
-  zoomHintText: { ...theme.type.caption, color: '#fff', flexShrink: 1 },
-
-  empty: { padding: theme.spacing.xxxl, alignItems: 'center' },
-  emptyMascot: {
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    backgroundColor: theme.colors.cream,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  emptyTitle: { ...theme.type.title3, color: theme.colors.text, marginBottom: 4 },
-  emptyBody: {
-    ...theme.type.subhead,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  emptyBtn: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: theme.radius.pill,
-  },
-  emptyBtnText: { ...theme.type.callout, color: '#fff', fontWeight: '600' },
+  zoomHintText: { ...theme.type.caption, color: theme.colors.textOnPrimary, flexShrink: 1 },
 
   footer: { padding: theme.spacing.lg, alignItems: 'center' },
-  footerText: { ...theme.type.footnote, color: theme.colors.textSecondary, textAlign: 'center' },
-
-  crisisLink: { alignItems: 'center', justifyContent: 'center', minHeight: 40, paddingBottom: 2 },
-  emptyCrisisLink: { alignItems: 'center', justifyContent: 'center', minHeight: 44, marginTop: theme.spacing.xs },
-  crisisLinkText: { ...theme.type.footnote, fontWeight: '600', color: theme.colors.accentDeep },
+  footerText: {
+    ...theme.type.footnote,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  showMoreBtn: { minWidth: 200 },
 });

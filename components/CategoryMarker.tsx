@@ -1,27 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View } from 'react-native';
-import { catColor } from '../lib/constants';
+import { catColor, catIcon } from '../lib/constants';
+import { theme } from '../lib/theme';
 
-const CATEGORY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
-  food: 'fast-food',
-  housing: 'home',
-  health: 'medkit',
-  mental_health: 'heart',
-  legal: 'document-text',
-  employment: 'briefcase',
-  education: 'school',
-  disability: 'accessibility',
-  family: 'people',
-  community: 'people-circle',
-  financial: 'wallet',
-  alcohol_drugs: 'flask',
-  information: 'information-circle',
-  transport: 'bus',
-  personal_care: 'hand-left',
-  technology: 'laptop',
-  other: 'ellipsis-horizontal',
-};
-
+// Map pin. A record geocoded only to a postcode centroid renders as a
+// dashed ring, not a confident solid pin: the marker itself is honest about
+// how precise the location is.
 type Props = {
   category: string;
   precision?: string;
@@ -38,11 +22,9 @@ export function CategoryMarker({ category, precision }: Props) {
     );
   }
 
-  const iconName = CATEGORY_ICON[category] ?? 'ellipsis-horizontal';
-
   return (
     <View style={[styles.solid, { backgroundColor: color }]}>
-      <Ionicons name={iconName} size={11} color="#fff" />
+      <Ionicons name={catIcon(category, 'filled')} size={11} color={theme.colors.textOnPrimary} />
     </View>
   );
 }
@@ -56,10 +38,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
-    shadowColor: '#000',
+    // Warm shadow to match the app's elevation story (not pure black).
+    shadowColor: '#5C4A2E',
     shadowOpacity: 0.25,
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
   approxOuter: {
     width: 22,

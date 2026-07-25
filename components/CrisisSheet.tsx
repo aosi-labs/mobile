@@ -12,6 +12,7 @@ import {
 import { openLink } from '../lib/links';
 import { CRISIS_LINES, smsUrl, telUrl } from '../lib/needs';
 import { theme } from '../lib/theme';
+import { SheetHeader } from './SheetHeader';
 
 type Props = {
   visible: boolean;
@@ -19,6 +20,8 @@ type Props = {
 };
 
 export function CrisisSheet({ visible, onClose }: Props) {
+  // Crisis calls get the strongest haptic in the app (the crisisCall
+  // intent): a firm, reassuring confirmation that the call is happening.
   const call = (phone: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     openLink(telUrl(phone));
@@ -27,24 +30,12 @@ export function CrisisSheet({ visible, onClose }: Props) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={styles.root}>
-        <View style={styles.header}>
-          <View style={styles.handle} />
-          <Pressable
-            onPress={() => {
-              void Haptics.selectionAsync();
-              onClose();
-            }}
-            hitSlop={16}
-            style={styles.closeBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-          >
-            <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
-          </Pressable>
-        </View>
+        <SheetHeader onClose={onClose} />
 
         <ScrollView contentContainerStyle={styles.body}>
-          <Text style={styles.title}>Someone to talk to, right now</Text>
+          <Text style={styles.title} accessibilityRole="header">
+            Someone to talk to, right now
+          </Text>
           <Text style={styles.sub}>
             These lines are free and confidential, and answer 24 hours a day.
           </Text>
@@ -56,9 +47,9 @@ export function CrisisSheet({ visible, onClose }: Props) {
             accessibilityLabel="In immediate danger, call triple zero"
           >
             <View style={styles.emergencyIcon}>
-              <Ionicons name="call" size={20} color="#fff" />
+              <Ionicons name="call" size={20} color={theme.colors.textOnPrimary} />
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={styles.emergencyTextWrap}>
               <Text style={styles.emergencyTitle}>In immediate danger?</Text>
               <Text style={styles.emergencySub}>Police, fire or ambulance</Text>
             </View>
@@ -132,43 +123,24 @@ export function CrisisSheet({ visible, onClose }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.bg },
-  header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.colors.border,
-    alignSelf: 'center',
-    marginBottom: theme.spacing.sm,
-  },
-  closeBtn: {
-    position: 'absolute',
-    right: theme.spacing.lg,
-    top: theme.spacing.sm,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: theme.colors.surfaceMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  body: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.xl, paddingBottom: theme.spacing.xxxl },
+  body: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xxxl },
   title: { ...theme.type.title1, color: theme.colors.text, marginBottom: theme.spacing.sm },
   sub: {
     ...theme.type.body,
     color: theme.colors.textSecondary,
-    lineHeight: 24,
     marginBottom: theme.spacing.xl,
   },
 
+  // The only red surface in the product.
   emergencyCard: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.dangerMuted,
     borderWidth: 1,
-    borderColor: 'rgba(194,69,45,0.25)',
+    borderColor: theme.colors.borderDangerSubtle,
     borderRadius: theme.radius.lg,
     marginBottom: theme.spacing.xl,
   },
@@ -180,6 +152,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  emergencyTextWrap: { flex: 1, minWidth: 150 },
   emergencyTitle: { ...theme.type.headline, color: theme.colors.dangerText },
   emergencySub: { ...theme.type.footnote, color: theme.colors.dangerText, marginTop: 1 },
   emergencyNumber: { ...theme.type.title2, color: theme.colors.danger, fontVariant: ['tabular-nums'] },
@@ -205,6 +178,7 @@ const styles = StyleSheet.create({
   },
   lineRowLast: { borderBottomWidth: 0 },
   altAction: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -234,7 +208,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     textAlign: 'center',
     marginTop: theme.spacing.xl,
-    lineHeight: 19,
   },
-  pressed: { opacity: 0.65 },
+  pressed: { opacity: theme.pressedOpacity },
 });

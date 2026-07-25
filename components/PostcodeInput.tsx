@@ -1,7 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { lookupPostcode, type PostcodeEntry } from '../lib/postcodes';
 import { theme } from '../lib/theme';
 
@@ -28,6 +37,19 @@ export function PostcodeInput({ visible, initialValue, onCancel, onConfirm }: Pr
   const ready = !!match;
   const showError = value.length === 4 && !match;
 
+  // VoiceOver users can't see the match/error cards appear; announce them.
+  useEffect(() => {
+    if (match) {
+      AccessibilityInfo.announceForAccessibility(
+        `Postcode matched. ${match.locality}, ${match.state}.`
+      );
+    } else if (showError) {
+      AccessibilityInfo.announceForAccessibility(
+        'That postcode is not recognised. Check the digits and try again.'
+      );
+    }
+  }, [match?.postcode, showError]);
+
   const submit = () => {
     if (!match) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -44,18 +66,20 @@ export function PostcodeInput({ visible, initialValue, onCancel, onConfirm }: Pr
               onCancel();
             }}
             hitSlop={12}
-            style={styles.headerBtn}
+            style={({ pressed }) => [styles.headerBtn, pressed && { opacity: theme.pressedOpacity }]}
             accessibilityRole="button"
             accessibilityLabel="Cancel"
           >
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>Enter postcode</Text>
+          <Text style={styles.headerTitle} accessibilityRole="header">
+            Enter postcode
+          </Text>
           <Pressable
             onPress={submit}
             disabled={!ready}
             hitSlop={12}
-            style={styles.headerBtn}
+            style={({ pressed }) => [styles.headerBtn, pressed && { opacity: theme.pressedOpacity }]}
             accessibilityRole="button"
             accessibilityLabel="Use this postcode"
             accessibilityState={{ disabled: !ready }}
@@ -123,7 +147,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.border,
   },
-  headerBtn: { paddingVertical: 4, minWidth: 60 },
+  headerBtn: { minHeight: 44, justifyContent: 'center', paddingVertical: 4, minWidth: 60 },
   headerTitle: { ...theme.type.headline, color: theme.colors.text, textAlign: 'center', flex: 1 },
   cancelText: { ...theme.type.callout, color: theme.colors.primary },
   doneText: { ...theme.type.callout, color: theme.colors.primary, fontWeight: '600', textAlign: 'right' },
@@ -131,10 +155,8 @@ const styles = StyleSheet.create({
 
   body: { padding: theme.spacing.xl, gap: theme.spacing.lg },
   label: {
-    ...theme.type.caption,
+    ...theme.type.eyebrow,
     color: theme.colors.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   inputWrap: {
     flexDirection: 'row',
@@ -177,8 +199,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.warningMuted,
     borderRadius: theme.radius.lg,
   },
-  errorText: { ...theme.type.subhead, color: theme.colors.warningText, flex: 1, lineHeight: 20 },
+  errorText: { ...theme.type.subhead, color: theme.colors.warningText, flex: 1 },
 
-  hint: { ...theme.type.subhead, color: theme.colors.textSecondary, lineHeight: 20 },
+  hint: { ...theme.type.subhead, color: theme.colors.textSecondary },
   privacy: { ...theme.type.footnote, color: theme.colors.textTertiary },
 });

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   Linking,
   Pressable,
   SafeAreaView,
@@ -10,19 +11,23 @@ import {
   Text,
   View,
 } from 'react-native';
-import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
-import { EmuMascot } from '../components/EmuMascot';
+import Animated from 'react-native-reanimated';
+import { Button } from '../components/Button';
+import { CrisisLink } from '../components/CrisisLink';
+import { EmptyState } from '../components/EmptyState';
 import { ShortlistCard } from '../components/ShortlistCard';
 import { SkeletonList } from '../components/SkeletonList';
 import { openLink } from '../lib/links';
+import { cardEntering } from '../lib/motion';
 import { getCrisisNote, telUrl, type CrisisNote, type Need } from '../lib/needs';
 import { lookupPostcode } from '../lib/postcodes';
 import { rankServices, shortlist } from '../lib/rank';
-import { theme } from '../lib/theme';
+import { theme, tint } from '../lib/theme';
 import type { Service } from '../lib/types';
 import type { UserLocationState } from '../hooks/useUserLocation';
 
 const SHORTLIST_SIZE = 5;
+const RANK_DEBOUNCE_MS = 2000;
 
 type Props = {
   need: Need;
@@ -63,9 +68,32 @@ export function ResultsScreen({
   onEnterPostcode,
   onRetry,
 }: Props) {
+  // While the first sync streams batches in, re-rank at most every 2s so the
+  // top 5 doesn't reshuffle under the person's finger.
+  const [stableServices, setStableServices] = useState(services);
+  const lastRankAtRef = useRef(0);
+  useEffect(() => {
+    if (!isSyncing) {
+      lastRankAtRef.current = Date.now();
+      setStableServices(services);
+      return;
+    }
+    const since = Date.now() - lastRankAtRef.current;
+    if (since >= RANK_DEBOUNCE_MS) {
+      lastRankAtRef.current = Date.now();
+      setStableServices(services);
+    } else {
+      const t = setTimeout(() => {
+        lastRankAtRef.current = Date.now();
+        setStableServices(services);
+      }, RANK_DEBOUNCE_MS - since);
+      return () => clearTimeout(t);
+    }
+  }, [services, isSyncing]);
+
   const ranked = useMemo(
-    () => rankServices(services, { category: need.category, coords: location.coords }),
-    [services, need.category, location.coords],
+    () => rankServices(stableServices, { category: need.category, coords: location.coords }),
+    [stableServices, need.category, location.coords],
   );
   const top = useMemo(() => shortlist(ranked, SHORTLIST_SIZE), [ranked]);
   const total = ranked.length;
@@ -78,13 +106,19 @@ export function ResultsScreen({
     (location.postcode ? lookupPostcode(location.postcode)?.state ?? null : null);
   const crisisNote = getCrisisNote(need, userState);
 
-  const needsLocationStep = !location.coords && !skipped;
-  const showLoading = isLoading || (services.length === 0 && isSyncing);
+  // Gate the skeleton on the SAME data the list renders from. Reading live
+  // `services` here while the list reads debounced `stableServices` would
+  // flash "No services found" for up to 2s on a first run: the first batch
+  // lands, loading ends, but the debounce still holds an empty list. Telling
+  // a distressed person nothing exists is the worst possible lie.
+  const showLoading =
+    isLoading || (stableServices.length === 0 && (isSyncing || services.length > 0));
 
   const placeLabel =
     location.placeLabel ?? (location.postcode ? `near ${location.postcode}` : null);
+  // Honest, not salesy: "good options", never "best" on 2016-vintage data.
   const subtitle = location.coords
-    ? `The best ${Math.min(SHORTLIST_SIZE, total)} of ${total.toLocaleString()} services near you`
+    ? `${Math.min(SHORTLIST_SIZE, total)} good options out of ${total.toLocaleString()} near you`
     : `${total.toLocaleString()} services from across Australia, phone lines first`;
 
   const loadingLine =
@@ -93,6 +127,17 @@ export function ResultsScreen({
         ? `Loading services, ${syncProgress.toLocaleString()} of ${syncTotal.toLocaleString()} so far`
         : `Loading services, ${syncProgress.toLocaleString()} so far`
       : `Finding ${need.label.toLowerCase()} services…`;
+
+  // Announce arrival for screen-reader users; the cards appearing is silent.
+  const announcedRef = useRef(false);
+  useEffect(() => {
+    if (!showLoading && top.length > 0 && !announcedRef.current) {
+      announcedRef.current = true;
+      AccessibilityInfo.announceForAccessibility(
+        `${Math.min(SHORTLIST_SIZE, total)} services found`
+      );
+    }
+  }, [showLoading, top.length, total]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -103,63 +148,103 @@ export function ResultsScreen({
             onBack();
           }}
           hitSlop={10}
-          style={styles.backBtn}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: theme.pressedOpacity }]}
           accessibilityRole="button"
           accessibilityLabel="Back"
         >
           <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={styles.title} numberOfLines={2} accessibilityRole="header">
             {need.label}
           </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={styles.subtitle} numberOfLines={2}>
             {location.coords && placeLabel ? `Near ${placeLabel.replace(/^near /i, '')}` : need.sub}
           </Text>
         </View>
-        <View style={[styles.needBubble, { backgroundColor: need.color + '1C' }]}>
+        <View style={[styles.needBubble, { backgroundColor: tint(need.color, 'faint') }]}>
           <Ionicons name={need.icon} size={18} color={need.color} />
         </View>
       </View>
 
-      {/* The crisis note renders in EVERY state, including the location step
-          and errors. The one moment we know someone may be in crisis must
-          never hide the lifeline behind a gate. */}
+      {/* The need's own crisis line, where one exists, renders in EVERY
+          state including loading and errors. The one moment we know someone
+          may be in crisis must never hide the lifeline behind a gate.
+          Needs without a state-specific note still get the crisis pill
+          below, so every state on this screen has a door to a human. */}
       {crisisNote ? <CrisisNoteBanner note={crisisNote} /> : null}
 
-      {needsLocationStep ? (
-        <LocationStep
-          isRequesting={location.status === 'requesting'}
-          wasDenied={location.status === 'denied'}
-          wasUnavailable={location.status === 'unavailable'}
-          onUseGps={() => void location.request()}
-          onEnterPostcode={onEnterPostcode}
-          onSkip={() => onSkipChange(true)}
-        />
-      ) : showLoading ? (
+      {showLoading ? (
         <View style={styles.loadingWrap}>
           <Text style={styles.loadingText}>{loadingLine}</Text>
-          <SkeletonList count={SHORTLIST_SIZE} />
+          <View style={styles.loadingList}>
+            <SkeletonList count={SHORTLIST_SIZE} variant="shortlist" />
+          </View>
+          {!crisisNote ? (
+            <CrisisLink variant="pill" onPress={onCrisisPress} style={styles.crisisFooter} />
+          ) : null}
         </View>
       ) : total === 0 ? (
-        <EmptyResults
-          hasError={!!error && services.length === 0}
-          needLabel={need.label}
-          onBrowseAll={onBrowseAll}
-          onRetry={onRetry}
-          onCrisisPress={onCrisisPress}
-        />
+        <ScrollView contentContainerStyle={styles.emptyScroll} showsVerticalScrollIndicator={false}>
+          <EmptyState
+            variant="concerned"
+            title={
+              error && services.length === 0
+                ? "Couldn't load services"
+                : `No ${need.label.toLowerCase()} services found`
+            }
+            body={
+              error && services.length === 0
+                ? "Can't reach the service list right now. Crisis lines still work, and any services already saved to your phone are still here."
+                : 'Try browsing all services instead, or check a nearby postcode.'
+            }
+            actionLabel={error && services.length === 0 ? 'Try again' : 'Browse all services'}
+            onAction={error && services.length === 0 ? onRetry : onBrowseAll}
+            secondaryLabel={error && services.length === 0 ? undefined : 'Change postcode'}
+            onSecondary={error && services.length === 0 ? undefined : onEnterPostcode}
+            onCrisisPress={onCrisisPress}
+          />
+        </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {/* The honesty line is the anti-overwhelm pitch; it reads like a
+              statement, not a footnote. */}
           <Text style={styles.countLine}>{subtitle}</Text>
+          {/* Say what the ranking actually did. Without coordinates there is
+              no distance term at all, so claiming one would be a lie. */}
+          <Text style={styles.rankExplainer}>
+            {location.coords
+              ? 'Sorted by distance and how sure we are the details still work.'
+              : 'Phone lines you can call from anywhere first, then how sure we are the details still work.'}
+          </Text>
+          {isSyncing && top.length > 0 ? (
+            <Text style={styles.stillLoading}>Still loading more services</Text>
+          ) : null}
 
-          {!location.coords ? (
+          {/* Help first, location second: the shortlist always renders. With
+              no location it's phone-lines-first, and this card offers the
+              upgrade without gating anything. */}
+          {!location.coords && !skipped ? (
+            <LocationUpgradeCard
+              isRequesting={location.status === 'requesting'}
+              wasDenied={location.status === 'denied'}
+              wasUnavailable={location.status === 'unavailable'}
+              onUseGps={() => void location.request()}
+              onOpenSettings={() => void Linking.openSettings()}
+              onEnterPostcode={onEnterPostcode}
+              onNotNow={() => onSkipChange(true)}
+            />
+          ) : null}
+          {!location.coords && skipped ? (
             <Pressable
               onPress={() => {
                 void Haptics.selectionAsync();
                 onSkipChange(false);
               }}
-              style={({ pressed }) => [styles.setLocationTop, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [
+                styles.setLocationTop,
+                pressed && { opacity: theme.pressedOpacity },
+              ]}
               accessibilityRole="button"
               accessibilityLabel="Set a location to see services near you"
             >
@@ -170,12 +255,7 @@ export function ResultsScreen({
           ) : null}
 
           {top.map((item, i) => (
-            <Animated.View
-              key={item.service.id}
-              entering={FadeInDown.delay(i * 55)
-                .duration(320)
-                .reduceMotion(ReduceMotion.System)}
-            >
+            <Animated.View key={item.service.id} entering={cardEntering(i)}>
               <ShortlistCard
                 rank={i + 1}
                 service={item.service}
@@ -186,33 +266,17 @@ export function ResultsScreen({
           ))}
 
           {total > SHORTLIST_SIZE ? (
-            <Pressable
-              onPress={() => {
-                void Haptics.selectionAsync();
-                onSeeAll();
-              }}
-              style={({ pressed }) => [styles.seeAllBtn, pressed && { opacity: 0.7 }]}
-              accessibilityRole="button"
+            <Button
+              label={`See all ${total.toLocaleString()} services`}
+              icon="arrow-forward"
+              variant="secondary"
+              onPress={onSeeAll}
               accessibilityLabel={`See all ${total.toLocaleString()} ${need.label} services`}
-            >
-              <Text style={styles.seeAllText}>
-                See all {total.toLocaleString()} services
-              </Text>
-              <Ionicons name="arrow-forward" size={15} color={theme.colors.primaryDeep} />
-            </Pressable>
+              style={styles.seeAllBtn}
+            />
           ) : null}
 
-          <Pressable
-            onPress={() => {
-              void Haptics.selectionAsync();
-              onCrisisPress();
-            }}
-            style={({ pressed }) => [styles.crisisLink, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Urgent? Free 24/7 crisis lines"
-          >
-            <Text style={styles.crisisLinkText}>Urgent? Free 24/7 crisis lines</Text>
-          </Pressable>
+          <CrisisLink variant="pill" onPress={onCrisisPress} style={styles.crisisFooter} />
         </ScrollView>
       )}
     </SafeAreaView>
@@ -232,7 +296,7 @@ function CrisisNoteBanner({ note }: { note: CrisisNote }) {
         accessibilityLabel={`${note.text} Call ${note.label} on ${note.phone}`}
       >
         <View style={styles.crisisNoteIcon}>
-          <Ionicons name="call" size={14} color="#fff" />
+          <Ionicons name="call" size={14} color={theme.colors.textOnPrimary} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.crisisNoteText}>{note.text}</Text>
@@ -245,176 +309,87 @@ function CrisisNoteBanner({ note }: { note: CrisisNote }) {
   );
 }
 
-function LocationStep({
+function LocationUpgradeCard({
   isRequesting,
   wasDenied,
   wasUnavailable,
   onUseGps,
+  onOpenSettings,
   onEnterPostcode,
-  onSkip,
+  onNotNow,
 }: {
   isRequesting: boolean;
   wasDenied: boolean;
   wasUnavailable: boolean;
   onUseGps: () => void;
+  onOpenSettings: () => void;
   onEnterPostcode: () => void;
-  onSkip: () => void;
+  onNotNow: () => void;
 }) {
-  // After a GPS failure the postcode path gets the primary emphasis; GPS
-  // stays available as a retry but stops being the suggested next step.
-  const postcodeFirst = wasUnavailable;
+  // After a GPS failure the postcode path gets the primary emphasis. A
+  // denied permission is a dead end for re-requesting (iOS won't re-prompt),
+  // so the GPS button honestly becomes a Settings link, never a fake retry.
+  const postcodeFirst = wasUnavailable || wasDenied;
 
-  const gpsButton = (
-    <Pressable
-      onPress={() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        onUseGps();
-      }}
+  const gpsButton = wasDenied ? (
+    <Button
+      icon="settings-outline"
+      label="Turn on location in Settings"
+      variant={postcodeFirst ? 'secondary' : 'primary'}
+      onPress={onOpenSettings}
+      accessibilityHint="Opens the iOS Settings app"
+    />
+  ) : (
+    <Button
+      icon="navigate"
+      label={
+        isRequesting ? 'Finding you…' : wasUnavailable ? 'Try my location again' : 'Use my location'
+      }
+      variant={postcodeFirst ? 'secondary' : 'primary'}
+      haptic="medium"
+      onPress={onUseGps}
       disabled={isRequesting}
-      style={({ pressed }) => [
-        postcodeFirst ? styles.locAlt : styles.locPrimary,
-        pressed && { opacity: 0.8 },
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={isRequesting ? 'Requesting your location' : 'Use my location'}
-      accessibilityState={{ disabled: isRequesting, busy: isRequesting }}
-    >
-      <Ionicons
-        name="navigate"
-        size={17}
-        color={postcodeFirst ? theme.colors.primaryDeep : '#fff'}
-      />
-      <Text style={postcodeFirst ? styles.locAltText : styles.locPrimaryText}>
-        {isRequesting ? 'Finding you…' : postcodeFirst ? 'Try my location again' : 'Use my location'}
-      </Text>
-    </Pressable>
+      busy={isRequesting}
+      accessibilityLabel={isRequesting ? 'Requesting your location' : undefined}
+    />
   );
 
   const postcodeButton = (
-    <Pressable
-      onPress={() => {
-        void Haptics.selectionAsync();
-        onEnterPostcode();
-      }}
-      style={({ pressed }) => [
-        postcodeFirst ? styles.locPrimary : styles.locAlt,
-        pressed && { opacity: 0.8 },
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel="Enter a postcode"
-    >
-      <Ionicons
-        name="location-outline"
-        size={17}
-        color={postcodeFirst ? '#fff' : theme.colors.primaryDeep}
-      />
-      <Text style={postcodeFirst ? styles.locPrimaryText : styles.locAltText}>
-        Enter a postcode
-      </Text>
-    </Pressable>
+    <Button
+      icon="location-outline"
+      label="Enter a postcode"
+      variant={postcodeFirst ? 'primary' : 'secondary'}
+      onPress={onEnterPostcode}
+    />
   );
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.locStep}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={styles.locMascot}>
-        <EmuMascot size={110} variant="searching" />
+    <View style={styles.upgradeCard}>
+      <View style={styles.upgradeHeader}>
+        <View style={styles.upgradeIcon}>
+          <Ionicons name="location" size={16} color={theme.colors.primaryDeep} />
+        </View>
+        <Text style={styles.upgradeTitle}>See what's near you</Text>
       </View>
-      <Text style={styles.locTitle}>Where should we look?</Text>
-      <Text style={styles.locBody}>
-        We use this once, to sort services by distance. It stays on your phone and is never shared.
-      </Text>
       {wasDenied ? (
-        <>
-          <Text style={styles.locNotice}>
-            Location is switched off for aosi. No worries, a postcode works just as well.
-          </Text>
-          <Pressable
-            onPress={() => {
-              void Haptics.selectionAsync();
-              void Linking.openSettings();
-            }}
-            style={({ pressed }) => [styles.locSettings, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Open Settings to allow location"
-          >
-            <Text style={styles.locSettingsText}>Open Settings</Text>
-          </Pressable>
-        </>
+        <Text style={styles.upgradeNotice}>
+          Location is switched off for aosi. No worries, a postcode works just as well.
+        </Text>
       ) : null}
       {wasUnavailable ? (
-        <Text style={styles.locNotice}>
+        <Text style={styles.upgradeNotice}>
           We could not get a GPS fix here. A postcode works just as well.
         </Text>
       ) : null}
-      <View style={styles.locActions}>
+      <View style={styles.upgradeActions}>
         {postcodeFirst ? postcodeButton : gpsButton}
         {postcodeFirst ? gpsButton : postcodeButton}
-        <Pressable
-          onPress={() => {
-            void Haptics.selectionAsync();
-            onSkip();
-          }}
-          style={({ pressed }) => [styles.locSkip, pressed && { opacity: 0.7 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Show services from anywhere"
-        >
-          <Text style={styles.locSkipText}>Show services from anywhere</Text>
-        </Pressable>
+        <Button label="Not now" variant="ghost" onPress={onNotNow} />
       </View>
-    </ScrollView>
-  );
-}
-
-function EmptyResults({
-  hasError,
-  needLabel,
-  onBrowseAll,
-  onRetry,
-  onCrisisPress,
-}: {
-  hasError: boolean;
-  needLabel: string;
-  onBrowseAll: () => void;
-  onRetry: () => void;
-  onCrisisPress: () => void;
-}) {
-  return (
-    <ScrollView contentContainerStyle={styles.empty} showsVerticalScrollIndicator={false}>
-      <View style={styles.emptyMascot}>
-        <EmuMascot size={120} variant="concerned" />
-      </View>
-      <Text style={styles.emptyTitle}>
-        {hasError ? "Couldn't load services" : `No ${needLabel.toLowerCase()} services found`}
+      <Text style={styles.upgradePrivacy}>
+        Used once to sort by distance. Your location stays on your phone and is never shared.
       </Text>
-      <Text style={styles.emptyBody}>
-        {hasError
-          ? 'You might be offline. Crisis lines still work, and any services already saved to your phone are still here.'
-          : 'Try browsing all services instead, or check a nearby postcode.'}
-      </Text>
-      <Pressable
-        onPress={hasError ? onRetry : onBrowseAll}
-        style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.8 }]}
-        accessibilityRole="button"
-        accessibilityLabel={hasError ? 'Retry' : 'Browse all services'}
-      >
-        <Text style={styles.emptyBtnText}>{hasError ? 'Retry' : 'Browse all services'}</Text>
-      </Pressable>
-      <Pressable
-        onPress={() => {
-          void Haptics.selectionAsync();
-          onCrisisPress();
-        }}
-        style={({ pressed }) => [styles.crisisLink, pressed && { opacity: 0.7 }]}
-        accessibilityRole="button"
-        accessibilityLabel="Urgent? Free 24/7 crisis lines"
-      >
-        <Text style={styles.crisisLinkText}>Urgent? Free 24/7 crisis lines</Text>
-      </Pressable>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -425,14 +400,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.layout.gutter,
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.md,
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -444,21 +419,35 @@ const styles = StyleSheet.create({
   needBubble: {
     width: 38,
     height: 38,
-    borderRadius: 13,
+    borderRadius: theme.radius.tile,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  scroll: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxxl },
+  scroll: { paddingHorizontal: theme.layout.gutter, paddingBottom: theme.spacing.xxxl },
   countLine: {
+    ...theme.type.subhead,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginLeft: 2,
+  },
+  rankExplainer: {
     ...theme.type.footnote,
     color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.md,
+    marginTop: 2,
     marginLeft: 2,
+    marginBottom: theme.spacing.md,
+  },
+  stillLoading: {
+    ...theme.type.footnote,
+    color: theme.colors.textTertiary,
+    marginLeft: 2,
+    marginTop: -theme.spacing.sm,
+    marginBottom: theme.spacing.md,
   },
 
   crisisNoteWrap: {
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.layout.gutter,
     paddingBottom: theme.spacing.md,
   },
   crisisNote: {
@@ -467,7 +456,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     backgroundColor: theme.colors.accentMuted,
     borderWidth: 1,
-    borderColor: 'rgba(217,119,66,0.30)',
+    borderColor: theme.colors.borderAccentSubtle,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.lg,
   },
@@ -479,16 +468,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  crisisNoteText: { ...theme.type.subhead, color: theme.colors.accentDeep, lineHeight: 20 },
+  crisisNoteText: { ...theme.type.subhead, color: theme.colors.accentDeep },
   crisisNotePhone: { ...theme.type.subhead, fontWeight: '700', color: theme.colors.accentDeep, marginTop: 3 },
 
+  upgradeCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+    ...theme.shadow,
+  },
+  upgradeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  upgradeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upgradeTitle: { ...theme.type.headline, color: theme.colors.text },
+  upgradeNotice: {
+    ...theme.type.footnote,
+    color: theme.colors.warningText,
+    backgroundColor: theme.colors.warningMuted,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    overflow: 'hidden',
+    marginBottom: theme.spacing.md,
+  },
+  upgradeActions: { gap: theme.spacing.sm },
+  upgradePrivacy: {
+    ...theme.type.footnote,
+    color: theme.colors.textTertiary,
+    marginTop: theme.spacing.md,
+  },
+
   setLocationTop: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
     backgroundColor: theme.colors.primaryMuted,
     borderWidth: 1,
-    borderColor: 'rgba(47,109,84,0.18)',
+    borderColor: theme.colors.borderPrimarySubtle,
     borderRadius: theme.radius.pill,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: 13,
@@ -501,126 +532,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  seeAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    backgroundColor: theme.colors.primaryMuted,
-    borderWidth: 1,
-    borderColor: 'rgba(47,109,84,0.18)',
-    paddingVertical: 14,
-    borderRadius: theme.radius.pill,
-    marginTop: theme.spacing.xs,
-  },
-  seeAllText: { ...theme.type.callout, fontWeight: '600', color: theme.colors.primaryDeep },
-
-  crisisLink: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-    marginTop: theme.spacing.xs,
-  },
-  crisisLinkText: { ...theme.type.footnote, fontWeight: '600', color: theme.colors.accentDeep },
+  seeAllBtn: { marginTop: theme.spacing.xs },
+  crisisFooter: { marginTop: theme.spacing.md, alignSelf: 'center' },
 
   loadingWrap: { flex: 1, paddingTop: theme.spacing.sm },
   loadingText: {
     ...theme.type.footnote,
     color: theme.colors.textSecondary,
-    marginLeft: theme.spacing.lg + 2,
+    marginLeft: theme.layout.gutter + 2,
     marginBottom: 2,
   },
+  loadingList: { paddingHorizontal: theme.layout.gutter },
 
-  locStep: { flex: 1, alignItems: 'center', paddingHorizontal: theme.spacing.xxl, paddingTop: theme.spacing.xl },
-  locMascot: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: theme.colors.cream,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.xl,
-  },
-  locTitle: { ...theme.type.title2, color: theme.colors.text, textAlign: 'center', marginBottom: theme.spacing.sm },
-  locBody: {
-    ...theme.type.subhead,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: theme.spacing.md,
-  },
-  locNotice: {
-    ...theme.type.footnote,
-    color: theme.colors.warningText,
-    backgroundColor: theme.colors.warningMuted,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radius.md,
-    textAlign: 'center',
-    overflow: 'hidden',
-    marginBottom: theme.spacing.sm,
-  },
-  locSettings: {
-    minHeight: 40,
-    justifyContent: 'center',
-    paddingHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-  },
-  locSettingsText: { ...theme.type.footnote, fontWeight: '700', color: theme.colors.primaryDeep },
-  locActions: { alignSelf: 'stretch', gap: theme.spacing.sm, marginTop: theme.spacing.md },
-  locPrimary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 15,
-    borderRadius: theme.radius.pill,
-    ...theme.shadowLifted,
-  },
-  locPrimaryText: { ...theme.type.headline, color: '#fff' },
-  locAlt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.borderStrong,
-    paddingVertical: 15,
-    borderRadius: theme.radius.pill,
-  },
-  locAltText: { ...theme.type.headline, color: theme.colors.primaryDeep },
-  locSkip: { alignItems: 'center', paddingVertical: theme.spacing.md },
-  locSkipText: { ...theme.type.callout, color: theme.colors.textSecondary },
-
-  empty: { flex: 1, alignItems: 'center', paddingHorizontal: theme.spacing.xxl, paddingTop: theme.spacing.xxl },
-  emptyMascot: {
-    width: 156,
-    height: 156,
-    borderRadius: 78,
-    backgroundColor: theme.colors.cream,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  emptyTitle: { ...theme.type.title3, color: theme.colors.text, textAlign: 'center', marginBottom: 4 },
-  emptyBody: {
-    ...theme.type.subhead,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: theme.spacing.lg,
-  },
-  emptyBtn: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: theme.radius.pill,
-  },
-  emptyBtnText: { ...theme.type.callout, color: '#fff', fontWeight: '600' },
+  emptyScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: theme.layout.gutter },
 });

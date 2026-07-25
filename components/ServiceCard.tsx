@@ -1,34 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { catColor, catLabel } from '../lib/constants';
+import { catColor, catIcon, catLabel } from '../lib/constants';
 import { formatDistance } from '../lib/geo';
 import { openLink } from '../lib/links';
 import { telUrl } from '../lib/needs';
 import { readiness } from '../lib/readiness';
-import { theme } from '../lib/theme';
+import { theme, tint } from '../lib/theme';
 import type { Service } from '../lib/types';
 import { PressableScale } from './PressableScale';
-
-const CATEGORY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
-  food: 'fast-food-outline',
-  housing: 'home-outline',
-  health: 'medkit-outline',
-  mental_health: 'heart-outline',
-  legal: 'document-text-outline',
-  employment: 'briefcase-outline',
-  education: 'school-outline',
-  disability: 'accessibility-outline',
-  family: 'people-outline',
-  community: 'people-circle-outline',
-  financial: 'wallet-outline',
-  alcohol_drugs: 'flask-outline',
-  information: 'information-circle-outline',
-  transport: 'bus-outline',
-  personal_care: 'hand-left-outline',
-  technology: 'laptop-outline',
-  other: 'ellipsis-horizontal-circle-outline',
-};
+import { ReadinessPill } from './ReadinessPill';
 
 type Props = {
   service: Service;
@@ -39,20 +20,37 @@ type Props = {
 export function ServiceCard({ service, distanceMeters, onPress }: Props) {
   const r = readiness(service);
   const color = catColor(service.category);
-  const icon = CATEGORY_ICON[service.category] || 'ellipsis-horizontal-circle-outline';
   const location = [service.suburb, service.state].filter(Boolean).join(', ');
+
+  const callService = () => {
+    if (!service.phone) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    openLink(telUrl(service.phone));
+  };
+
+  // The outer button flattens its subtree for VoiceOver, so the nested call
+  // button would be unreachable. Custom accessibility actions put Call on
+  // the rotor instead.
+  const a11yActions = service.phone
+    ? [{ name: 'activate' }, { name: 'call', label: `Call ${service.name}` }]
+    : [{ name: 'activate' }];
 
   return (
     <PressableScale
       style={styles.card}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${service.name}, ${catLabel(service.category)}, ${location || 'location unknown'}. ${r.label}`}
-      accessibilityHint="Opens the service details"
+      accessibilityLabel={`${service.name}, ${catLabel(service.category)}, ${location || 'location unknown'}. ${r.label}${service.phone ? '. Has a phone number' : ''}`}
+      accessibilityHint="Opens the service details. Swipe up or down for more actions."
+      accessibilityActions={a11yActions}
+      onAccessibilityAction={(e) => {
+        if (e.nativeEvent.actionName === 'call') callService();
+        else onPress();
+      }}
     >
       <View style={[styles.rail, { backgroundColor: color }]} />
-      <View style={[styles.iconWrap, { backgroundColor: color + '1A' }]}>
-        <Ionicons name={icon} size={22} color={color} />
+      <View style={[styles.iconWrap, { backgroundColor: tint(color, 'faint') }]}>
+        <Ionicons name={catIcon(service.category, 'outline')} size={22} color={color} />
       </View>
       <View style={styles.body}>
         <View style={styles.topRow}>
@@ -70,39 +68,23 @@ export function ServiceCard({ service, distanceMeters, onPress }: Props) {
           </Text>
         </View>
         <View style={styles.tagRow}>
-          <ReadyPill kind={r.key} label={r.label} />
+          <ReadinessPill service={service} />
         </View>
       </View>
       {service.phone ? (
         <Pressable
-          onPress={() => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            openLink(telUrl(service.phone!));
-          }}
+          onPress={callService}
           hitSlop={8}
-          style={({ pressed }) => [styles.callBtn, pressed && { opacity: 0.75 }]}
+          style={({ pressed }) => [styles.callBtn, pressed && { opacity: theme.pressedOpacity }]}
           accessibilityRole="button"
           accessibilityLabel={`Call ${service.name}`}
         >
-          <Ionicons name="call" size={17} color="#fff" />
+          <Ionicons name="call" size={17} color={theme.colors.textOnPrimary} />
         </Pressable>
       ) : (
         <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
       )}
     </PressableScale>
-  );
-}
-
-function ReadyPill({ kind, label }: { kind: 'ready' | 'verify' | 'low'; label: string }) {
-  // Stale data gets caution amber, never danger red; red is reserved for 000.
-  const bg = kind === 'ready' ? theme.colors.successMuted : theme.colors.warningMuted;
-  const fg = kind === 'ready' ? theme.colors.successText : theme.colors.warningText;
-  const dot = kind === 'ready' ? theme.colors.success : theme.colors.warning;
-  return (
-    <View style={[styles.readyPill, { backgroundColor: bg }]}>
-      <View style={[styles.dot, { backgroundColor: dot }]} />
-      <Text style={[styles.readyLabel, { color: fg }]}>{label}</Text>
-    </View>
   );
 }
 
@@ -116,7 +98,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    marginHorizontal: theme.spacing.lg,
+    marginHorizontal: theme.layout.gutter,
     marginBottom: theme.spacing.md,
     gap: theme.spacing.md,
     overflow: 'hidden',
@@ -132,7 +114,7 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 48,
     height: 48,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.tile,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -155,16 +137,8 @@ const styles = StyleSheet.create({
     gap: 6,
     flexWrap: 'wrap',
   },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  readyPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: theme.radius.pill,
-  },
-  readyLabel: { ...theme.type.caption },
+  // No nested shadow: the card carries the elevation, controls inside it
+  // stay flat.
   callBtn: {
     width: 42,
     height: 42,
@@ -172,6 +146,5 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    ...theme.shadow,
   },
 });
