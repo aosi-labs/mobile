@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { catColor, catLabel } from '../lib/constants';
 import { formatDistance } from '../lib/geo';
+import { openLink } from '../lib/links';
+import { telUrl } from '../lib/needs';
 import { readiness } from '../lib/readiness';
 import { theme } from '../lib/theme';
 import type { Service } from '../lib/types';
@@ -44,7 +47,7 @@ export function ServiceCard({ service, distanceMeters, onPress }: Props) {
       style={styles.card}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${service.name}, ${catLabel(service.category)}, ${location || 'location unknown'}`}
+      accessibilityLabel={`${service.name}, ${catLabel(service.category)}, ${location || 'location unknown'}. ${r.label}`}
       accessibilityHint="Opens the service details"
     >
       <View style={[styles.rail, { backgroundColor: color }]} />
@@ -68,32 +71,33 @@ export function ServiceCard({ service, distanceMeters, onPress }: Props) {
         </View>
         <View style={styles.tagRow}>
           <ReadyPill kind={r.key} label={r.label} />
-          {service.phone ? (
-            <View style={styles.tag}>
-              <Ionicons name="call-outline" size={11} color={theme.colors.textSecondary} />
-              <Text style={styles.tagText}>Phone</Text>
-            </View>
-          ) : null}
-          {service.website ? (
-            <View style={styles.tag}>
-              <Ionicons name="globe-outline" size={11} color={theme.colors.textSecondary} />
-              <Text style={styles.tagText}>Web</Text>
-            </View>
-          ) : null}
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+      {service.phone ? (
+        <Pressable
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            openLink(telUrl(service.phone!));
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.callBtn, pressed && { opacity: 0.75 }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Call ${service.name}`}
+        >
+          <Ionicons name="call" size={17} color="#fff" />
+        </Pressable>
+      ) : (
+        <Ionicons name="chevron-forward" size={18} color={theme.colors.textTertiary} />
+      )}
     </PressableScale>
   );
 }
 
 function ReadyPill({ kind, label }: { kind: 'ready' | 'verify' | 'low'; label: string }) {
-  const bg =
-    kind === 'ready' ? theme.colors.successMuted : kind === 'verify' ? theme.colors.warningMuted : theme.colors.dangerMuted;
-  const fg =
-    kind === 'ready' ? theme.colors.successText : kind === 'verify' ? theme.colors.warningText : theme.colors.dangerText;
-  const dot =
-    kind === 'ready' ? theme.colors.success : kind === 'verify' ? theme.colors.warning : theme.colors.danger;
+  // Stale data gets caution amber, never danger red; red is reserved for 000.
+  const bg = kind === 'ready' ? theme.colors.successMuted : theme.colors.warningMuted;
+  const fg = kind === 'ready' ? theme.colors.successText : theme.colors.warningText;
+  const dot = kind === 'ready' ? theme.colors.success : theme.colors.warning;
   return (
     <View style={[styles.readyPill, { backgroundColor: bg }]}>
       <View style={[styles.dot, { backgroundColor: dot }]} />
@@ -135,7 +139,13 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.sm },
   name: { ...theme.type.headline, color: theme.colors.text, flex: 1 },
-  distance: { ...theme.type.caption, color: theme.colors.accent, marginTop: 2 },
+  distance: {
+    ...theme.type.footnote,
+    fontWeight: '700',
+    color: theme.colors.accentDeep,
+    fontVariant: ['tabular-nums'],
+    marginTop: 2,
+  },
   metaRow: { marginTop: 2 },
   metaText: { ...theme.type.footnote, color: theme.colors.textSecondary },
   tagRow: {
@@ -155,14 +165,13 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
   },
   readyLabel: { ...theme.type.caption },
-  tag: {
-    flexDirection: 'row',
+  callBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: theme.colors.primary,
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    ...theme.shadow,
   },
-  tagText: { ...theme.type.caption, color: theme.colors.textSecondary },
 });

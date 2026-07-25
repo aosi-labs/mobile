@@ -6,11 +6,13 @@ import {
   BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
-import { forwardRef, useMemo } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { catColor, catLabel } from '../lib/constants';
+import { forwardRef, useMemo, useState } from 'react';
+import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { catColor, catLabel, SOURCE_VINTAGE } from '../lib/constants';
 import { formatDistance } from '../lib/geo';
-import { locationLabel, qualityLabel, readiness, serviceAgeLabel } from '../lib/readiness';
+import { openLink } from '../lib/links';
+import { telUrl, webUrl } from '../lib/needs';
+import { locationLabel, qualityLabel, readiness } from '../lib/readiness';
 import { theme } from '../lib/theme';
 import type { Service } from '../lib/types';
 
@@ -75,7 +77,23 @@ function ServiceDetailContent({ service, distanceMeters }: { service: Service; d
 
   const open = (url: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    void Linking.openURL(url);
+    openLink(url);
+  };
+
+  const shareService = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const address = [service.address, service.suburb, service.state, service.postcode]
+      .filter(Boolean)
+      .join(', ');
+    const lines = [
+      service.name,
+      catLabel(service.category),
+      address || null,
+      service.phone ? `Phone: ${service.phone}` : null,
+      service.website ? service.website : null,
+      'Found with aosi, the Australian Open Services Index.',
+    ].filter(Boolean);
+    void Share.share({ message: lines.join('\n') });
   };
 
   return (
@@ -102,8 +120,6 @@ function ServiceDetailContent({ service, distanceMeters }: { service: Service; d
         </View>
       </View>
 
-      {service.description ? <Text style={styles.desc}>{service.description}</Text> : null}
-
       <View style={styles.actions}>
         {service.phone ? (
           <ActionButton
@@ -111,19 +127,22 @@ function ServiceDetailContent({ service, distanceMeters }: { service: Service; d
             label={`Call ${service.phone}`}
             primary
             fullWidth
-            onPress={() => open(`tel:${service.phone}`)}
+            onPress={() => open(telUrl(service.phone!))}
           />
         ) : null}
         {directionsUrl ? (
           <ActionButton icon="navigate" label="Directions" onPress={() => open(directionsUrl)} />
         ) : null}
         {service.website ? (
-          <ActionButton icon="globe" label="Website" onPress={() => open(service.website)} />
+          <ActionButton icon="globe" label="Website" onPress={() => open(webUrl(service.website))} />
         ) : null}
         {service.email ? (
           <ActionButton icon="mail" label="Email" onPress={() => open(`mailto:${service.email}`)} />
         ) : null}
+        <ActionButton icon="share-outline" label="Share" onPress={shareService} />
       </View>
+
+      {service.description ? <Description text={service.description} /> : null}
 
       <Section title="Location">
         <Field
@@ -143,28 +162,55 @@ function ServiceDetailContent({ service, distanceMeters }: { service: Service; d
         </Section>
       )}
 
-      <Section title="Data quality">
-        <Row label="Record" value={qualityLabel(service.quality)} />
-        <Row label="Location" value={locationLabel(service)} />
-        <Row label="Source age" value={serviceAgeLabel(service)} />
-      </Section>
-
-      <View style={styles.verifyNote}>
-        <Ionicons name="warning-outline" size={14} color={theme.colors.warning} />
-        <Text style={styles.verifyText}>
-          Information may be out of date. Call ahead before visiting.
-        </Text>
-      </View>
-
-      <Section title="Source">
-        <Text style={styles.sourceOrg}>
-          {service.source_organisation || service.source_name || service.source_id}
-        </Text>
+      <Section title="About this listing">
+        <Text style={styles.trustText}>{trustSummary(service)}</Text>
+        <View style={styles.trustRows}>
+          <Row label="Record detail" value={qualityLabel(service.quality)} />
+          <Row label="Map pin" value={locationLabel(service)} />
+        </View>
         {service.source_license ? (
           <Text style={styles.sourceLicense}>License · {service.source_license}</Text>
         ) : null}
       </Section>
     </BottomSheetScrollView>
+  );
+}
+
+const DESC_CLAMP_LINES = 4;
+
+// Long government descriptions must not push the actions or hours below the
+// fold; clamp and let the reader opt in. Clampability comes from the real
+// rendered line count via an invisible unclamped copy, not a character guess.
+function Description({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [clampable, setClampable] = useState(false);
+  return (
+    <View style={styles.descWrap}>
+      <Text
+        style={[styles.desc, styles.descMeasure]}
+        onTextLayout={(e) => setClampable(e.nativeEvent.lines.length > DESC_CLAMP_LINES)}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        {text}
+      </Text>
+      <Text style={styles.desc} numberOfLines={expanded ? undefined : DESC_CLAMP_LINES}>
+        {text}
+      </Text>
+      {clampable ? (
+        <Pressable
+          onPress={() => {
+            void Haptics.selectionAsync();
+            setExpanded((e) => !e);
+          }}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? 'Show less of the description' : 'Read the full description'}
+        >
+          <Text style={styles.descToggle}>{expanded ? 'Show less' : 'Read more'}</Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -243,21 +289,31 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+// One honest paragraph instead of a metadata table: where the record came
+// from, how old it is, and what to do about it.
+function trustSummary(s: Service): string {
+  const org = s.source_organisation || s.source_name || s.source_id || 'an open government dataset';
+  const vintage = SOURCE_VINTAGE[s.source_id];
+  const agePart = vintage
+    ? ` The data was last updated in ${vintage.label}, so details may have changed.`
+    : ' Details may have changed since it was published.';
+  return `This listing comes from ${org}.${agePart} Call ahead to check before visiting.`;
+}
+
+// Stale data gets caution amber, never danger red; red is reserved for 000.
 function readyBg(k: 'ready' | 'verify' | 'low') {
   return {
-    backgroundColor:
-      k === 'ready' ? theme.colors.successMuted : k === 'verify' ? theme.colors.warningMuted : theme.colors.dangerMuted,
+    backgroundColor: k === 'ready' ? theme.colors.successMuted : theme.colors.warningMuted,
   };
 }
 function readyColor(k: 'ready' | 'verify' | 'low') {
   return {
-    color:
-      k === 'ready' ? theme.colors.successText : k === 'verify' ? theme.colors.warningText : theme.colors.dangerText,
+    color: k === 'ready' ? theme.colors.successText : theme.colors.warningText,
   };
 }
 function readyDot(k: 'ready' | 'verify' | 'low') {
   return {
-    backgroundColor: k === 'ready' ? theme.colors.success : k === 'verify' ? theme.colors.warning : theme.colors.danger,
+    backgroundColor: k === 'ready' ? theme.colors.success : theme.colors.warning,
   };
 }
 
@@ -311,8 +367,11 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     backgroundColor: theme.colors.surface,
   },
-  distText: { ...theme.type.caption, color: theme.colors.accent },
-  desc: { ...theme.type.body, color: theme.colors.textSecondary, lineHeight: 25, marginBottom: theme.spacing.xl },
+  distText: { ...theme.type.caption, color: theme.colors.accentDeep },
+  descWrap: { marginBottom: theme.spacing.xl },
+  desc: { ...theme.type.body, color: theme.colors.textSecondary, lineHeight: 25 },
+  descMeasure: { position: 'absolute', left: 0, right: 0, opacity: 0, zIndex: -1 },
+  descToggle: { ...theme.type.callout, fontWeight: '600', color: theme.colors.primaryDeep, marginTop: 6 },
 
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, marginBottom: theme.spacing.xl },
   actionBtn: {
@@ -352,7 +411,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   field: { flexDirection: 'row', gap: theme.spacing.md, paddingVertical: 6 },
-  fieldLabel: { ...theme.type.caption, color: theme.colors.textTertiary, marginBottom: 1 },
+  fieldLabel: { ...theme.type.caption, color: theme.colors.textSecondary, marginBottom: 1 },
   fieldValue: { ...theme.type.callout, color: theme.colors.text, lineHeight: 22 },
   row: {
     flexDirection: 'row',
@@ -364,19 +423,7 @@ const styles = StyleSheet.create({
   rowLabel: { ...theme.type.subhead, color: theme.colors.textSecondary },
   rowValue: { ...theme.type.subhead, color: theme.colors.text, fontWeight: '500' },
 
-  sourceOrg: { ...theme.type.callout, color: theme.colors.text },
-  sourceLicense: { ...theme.type.footnote, color: theme.colors.textTertiary, marginTop: 4 },
-
-  verifyNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: theme.spacing.lg,
-    backgroundColor: theme.colors.warningMuted,
-    borderRadius: theme.radius.md,
-    marginTop: theme.spacing.xs,
-    marginBottom: theme.spacing.lg,
-  },
-  verifyText: { ...theme.type.footnote, color: theme.colors.warningText, flex: 1 },
+  trustText: { ...theme.type.subhead, color: theme.colors.text, lineHeight: 21 },
+  trustRows: { marginTop: theme.spacing.sm },
+  sourceLicense: { ...theme.type.footnote, color: theme.colors.textTertiary, marginTop: theme.spacing.sm },
 });

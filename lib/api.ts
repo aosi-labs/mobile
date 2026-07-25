@@ -25,6 +25,7 @@ export type FirstPage = {
   // stored at the last successful sync, the dataset is assumed unchanged and
   // the remaining ~24 pages are skipped.
   signature: string;
+  totalCount: number | null;
 };
 
 async function fetchPage(url: string): Promise<Page> {
@@ -43,6 +44,7 @@ export async function fetchFirstPage(): Promise<FirstPage> {
     rows,
     nextUrl: json.next_url || null,
     signature: `${count}:${rows.length}:${hashString(JSON.stringify(rows))}`,
+    totalCount: json.filtered_table_rows_count ?? null,
   };
 }
 
@@ -61,10 +63,4 @@ export async function fetchRemainingServices(
     url = json.next_url || null;
   }
   return all;
-}
-
-export async function fetchAllServices(
-  onBatch?: (rows: Service[], total: number) => void
-): Promise<Service[]> {
-  return fetchRemainingServices(await fetchFirstPage(), onBatch);
 }

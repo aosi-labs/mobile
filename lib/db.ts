@@ -97,7 +97,10 @@ export async function countServices(): Promise<number> {
 
 export async function loadAllServices(): Promise<Service[]> {
   const db = await getDb();
-  return db.getAllAsync<Service>('SELECT * FROM services');
+  // Upstream-flagged duplicates never reach ranking, browse, or the map.
+  return db.getAllAsync<Service>(
+    "SELECT * FROM services WHERE duplicate_of IS NULL OR duplicate_of = ''",
+  );
 }
 
 const INSERT_COLUMNS = [

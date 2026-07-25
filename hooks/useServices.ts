@@ -19,6 +19,7 @@ export type ServicesState = {
   isLoading: boolean;
   isSyncing: boolean;
   syncProgress: number;
+  syncTotal: number | null;
   lastSynced: number | null;
   error: string | null;
   refresh: () => Promise<void>;
@@ -29,6 +30,7 @@ export function useServices(): ServicesState {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
+  const [syncTotal, setSyncTotal] = useState<number | null>(null);
   const [lastSynced, setLastSyncedState] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const syncingRef = useRef(false);
@@ -44,19 +46,32 @@ export function useServices(): ServicesState {
       // successful sync, skip downloading the remaining ~24 pages.
       const first = await fetchFirstPage();
       const [prevSignature, count] = await Promise.all([getSyncSignature(), countServices()]);
+      const firstRun = count === 0;
+      setSyncTotal(first.totalCount);
       const now = Date.now();
       if (count > 0 && prevSignature === first.signature) {
         await setLastSynced(now);
         setLastSyncedState(now);
         return;
       }
-      const rows = await fetchRemainingServices(first, (_batch, total) => {
+      // On first run, stream pages into the UI as they arrive so a user on a
+      // slow connection sees their nearby services within seconds instead of
+      // after the whole download. If the download dies partway, the streamed
+      // rows stay usable in memory; SQLite only ever gets the complete set,
+      // so the cache is never corrupted. Re-syncs never stream, so an
+      // existing cached list is never replaced by a partial one.
+      let streamed: Service[] = [];
+      const rows = await fetchRemainingServices(first, (batch, total) => {
         setSyncProgress(total);
+        if (firstRun) {
+          streamed = streamed.concat(batch.filter((r) => !r.duplicate_of));
+          setServices(streamed);
+        }
       });
       await replaceAllServices(rows);
       await setSyncSignature(first.signature);
       await setLastSynced(now);
-      setServices(rows);
+      setServices(rows.filter((r) => !r.duplicate_of));
       setLastSyncedState(now);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Sync failed';
@@ -103,6 +118,7 @@ export function useServices(): ServicesState {
     isLoading,
     isSyncing,
     syncProgress,
+    syncTotal,
     lastSynced,
     error,
     refresh: sync,

@@ -93,7 +93,7 @@ export function PostcodeInput({ visible, initialValue, onCancel, onConfirm }: Pr
             </View>
           ) : showError ? (
             <View style={styles.errorCard}>
-              <Ionicons name="alert-circle" size={18} color={theme.colors.danger} />
+              <Ionicons name="alert-circle" size={18} color={theme.colors.warning} />
               <Text style={styles.errorText}>That postcode isn't recognised. Check the digits and try again.</Text>
             </View>
           ) : (
@@ -168,15 +168,16 @@ const styles = StyleSheet.create({
   matchLocality: { ...theme.type.headline, color: theme.colors.successText },
   matchHint: { ...theme.type.footnote, color: theme.colors.successText, marginTop: 2 },
 
+  // A typo is a caution moment, not a danger one; red stays reserved for 000.
   errorCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
     padding: theme.spacing.lg,
-    backgroundColor: theme.colors.dangerMuted,
+    backgroundColor: theme.colors.warningMuted,
     borderRadius: theme.radius.lg,
   },
-  errorText: { ...theme.type.subhead, color: theme.colors.dangerText, flex: 1, lineHeight: 20 },
+  errorText: { ...theme.type.subhead, color: theme.colors.warningText, flex: 1, lineHeight: 20 },
 
   hint: { ...theme.type.subhead, color: theme.colors.textSecondary, lineHeight: 20 },
   privacy: { ...theme.type.footnote, color: theme.colors.textTertiary },

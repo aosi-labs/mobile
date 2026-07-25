@@ -1,26 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { NEEDS } from '../lib/needs';
 import { theme } from '../lib/theme';
 import { PressableScale } from './PressableScale';
-
-export type Intent = {
-  key: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  category: string;
-};
-
-export const INTENTS: Intent[] = [
-  { key: 'food', label: 'Food', icon: 'fast-food', color: '#16a34a', category: 'food' },
-  { key: 'housing', label: 'Housing', icon: 'home', color: '#d97706', category: 'housing' },
-  { key: 'mental_health', label: 'Talk to someone', icon: 'chatbubbles', color: '#7c3aed', category: 'mental_health' },
-  { key: 'financial', label: 'Money help', icon: 'wallet', color: '#ca8a04', category: 'financial' },
-  { key: 'health', label: 'Health', icon: 'medkit', color: '#2563eb', category: 'health' },
-  { key: 'legal', label: 'Legal', icon: 'document-text', color: '#ea580c', category: 'legal' },
-  { key: 'employment', label: 'Jobs', icon: 'briefcase', color: '#059669', category: 'employment' },
-  { key: 'family', label: 'Family', icon: 'people', color: '#dc2626', category: 'family' },
-];
 
 type Props = {
   active: string | null;
@@ -34,26 +16,26 @@ export function IntentStrip({ active, onChange }: Props) {
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.row}
     >
-      {INTENTS.map((intent) => {
-        const isActive = active === intent.key;
+      {NEEDS.map((need) => {
+        const isActive = active === need.key;
         return (
           <PressableScale
-            key={intent.key}
-            onPress={() => onChange(isActive ? null : intent.key)}
+            key={need.key}
+            onPress={() => onChange(isActive ? null : need.key)}
             scaleTo={0.94}
             style={[
               styles.chip,
-              { backgroundColor: intent.color + '14', borderColor: intent.color + '33' },
-              isActive && { backgroundColor: intent.color, borderColor: intent.color },
+              { backgroundColor: need.color + '14', borderColor: need.color + '33' },
+              isActive && { backgroundColor: need.color, borderColor: need.color },
             ]}
             accessibilityRole="button"
-            accessibilityLabel={`${intent.label} filter`}
+            accessibilityLabel={`${need.label} filter`}
             accessibilityState={{ selected: isActive }}
           >
-            <View style={[styles.iconBubble, isActive ? styles.iconBubbleActive : { backgroundColor: intent.color + '26' }]}>
-              <Ionicons name={intent.icon} size={14} color={isActive ? '#fff' : intent.color} />
+            <View style={[styles.iconBubble, isActive ? styles.iconBubbleActive : { backgroundColor: need.color + '26' }]}>
+              <Ionicons name={need.icon} size={14} color={isActive ? '#fff' : need.color} />
             </View>
-            <Text style={[styles.label, isActive && styles.labelActive]}>{intent.label}</Text>
+            <Text style={[styles.label, isActive && styles.labelActive]}>{need.label}</Text>
           </PressableScale>
         );
       })}

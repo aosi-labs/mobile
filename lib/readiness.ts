@@ -25,6 +25,9 @@ export function qualityLabel(q: string): string {
 
 export type Readiness = { key: 'ready' | 'verify' | 'low'; label: string };
 
+// Labels are plain language shown verbatim on every surface. The green
+// 'ready' state exists only when a known source vintage under 5 years backs
+// it; an unknown vintage gets amber and "call to check", never "up to date".
 export function readiness(s: Service): Readiness {
   const hasContact = !!(s.phone || s.website || s.email);
   const hasLocation = !!(s.address || (s.latitude && s.longitude));
@@ -34,19 +37,15 @@ export function readiness(s: Service): Readiness {
     hasContact &&
     hasLocation &&
     s.location_precision !== 'none' &&
-    (age == null || age < 5)
+    age != null &&
+    age < 5
   ) {
-    return { key: 'ready', label: 'Ready' };
+    return { key: 'ready', label: `Updated ${SOURCE_VINTAGE[s.source_id].label}` };
   }
   if (!hasContact || !hasLocation || s.quality === 'minimal' || (age != null && age >= 10)) {
-    return { key: 'low', label: 'Low confidence' };
+    return { key: 'low', label: 'Details may be old' };
   }
-  return { key: 'verify', label: 'Verify' };
-}
-
-export function serviceAgeLabel(s: Service): string {
-  const vintage = SOURCE_VINTAGE[s.source_id];
-  return vintage ? `${ageYears(vintage.year)}y old` : 'source date unknown';
+  return { key: 'verify', label: 'Call to check details' };
 }
 
 export function locationLabel(s: Service): string {

@@ -1,8 +1,21 @@
 import { Platform } from 'react-native';
 
-// Warm "paper and eucalyptus" design language. The canvas is a soft cream,
-// surfaces are warm white with gentle borders, and the primary is a calm
-// eucalyptus green with terracotta reserved for moments of emphasis.
+// ============================================================
+// AOSI BRAND: "Eucalyptus + Ochre on Paper"
+// The official colour system for aosi (app, web, and collateral).
+// See BRAND.md at the repo root for usage rules.
+//
+//   Eucalyptus green  - primary. Trust, calm, action. All primary
+//                       buttons, active states, links.
+//   Ochre terracotta  - warmth and urgency. Crisis surfaces and
+//                       key data (distance) ONLY. Never decoration.
+//   Paper neutrals    - warm cream canvas, white cards, taupe text.
+//   Danger red        - reserved for 000/emergency only.
+//
+// Every text/background pair here meets WCAG AA on its intended
+// surface (textTertiary 5.1:1 on bg, accentDeep 5.4:1 on bg,
+// white 6.1:1 on primary).
+// ============================================================
 export const theme = {
   colors: {
     bg: '#FAF5EC',
@@ -13,11 +26,12 @@ export const theme = {
     borderStrong: '#D9CDB8',
     text: '#2B2620',
     textSecondary: '#6B5F4F',
-    textTertiary: '#A2947E',
+    textTertiary: '#75664F',
     primary: '#2F6D54',
     primaryDeep: '#24543F',
     primaryMuted: '#E4EFE8',
     accent: '#D97742',
+    accentDeep: '#A34A22',
     accentMuted: '#FBEADD',
     success: '#2E8B57',
     successMuted: '#E0F2E7',

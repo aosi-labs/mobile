@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Application from 'expo-application';
 import * as Haptics from 'expo-haptics';
 import {
-  Linking,
   Modal,
   Pressable,
   SafeAreaView,
@@ -11,6 +10,8 @@ import {
   Text,
   View,
 } from 'react-native';
+import { openLink } from '../lib/links';
+import { telUrl } from '../lib/needs';
 import { theme } from '../lib/theme';
 import { EmuMascot } from './EmuMascot';
 
@@ -34,7 +35,7 @@ type Props = {
 export function AboutSheet({ visible, onClose, onChangeLocation }: Props) {
   const open = (url: string) => {
     void Haptics.selectionAsync();
-    void Linking.openURL(url);
+    openLink(url);
   };
 
   return (
@@ -80,9 +81,9 @@ export function AboutSheet({ visible, onClose, onChangeLocation }: Props) {
 
           <Section title="Why aosi exists">
             <Text style={styles.bodyText}>
-              aosi pulls together publicly available support service data — food relief, housing, mental health,
-              legal help, and more — from official Australian sources. The aim is to make help easier to find,
-              especially when you're in a hurry or on patchy connectivity.
+              aosi pulls together publicly available support service data from official Australian sources:
+              food relief, housing, mental health, legal help, and more. The aim is to make help easier to
+              find, especially when you're in a hurry or on patchy connectivity.
             </Text>
             <View style={{ height: 12 }} />
             <Text style={styles.bodyText}>
@@ -95,7 +96,7 @@ export function AboutSheet({ visible, onClose, onChangeLocation }: Props) {
             <Bullet>Service hours, availability, and eligibility can change at any time.</Bullet>
             <Bullet>Always call ahead before visiting to confirm a service is open and can help.</Bullet>
             <Bullet>aosi does not collect, track, or share your personal data.</Bullet>
-            <Bullet>Your location stays on your device — we never send it anywhere.</Bullet>
+            <Bullet>Your location stays on your device. We never send it anywhere.</Bullet>
           </Section>
 
           <Section title="Location">
@@ -179,7 +180,7 @@ function CrisisLine({ label, number }: { label: string; number: string }) {
     <Pressable
       onPress={() => {
         void Haptics.selectionAsync();
-        void Linking.openURL(`tel:${number.replace(/\s/g, '')}`);
+        openLink(telUrl(number));
       }}
       style={({ pressed }) => [styles.crisisLine, pressed && { opacity: 0.7 }]}
       accessibilityRole="button"

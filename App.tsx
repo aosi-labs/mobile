@@ -1,76 +1,39 @@
-import { Ionicons } from '@expo/vector-icons';
-import { BottomSheetModalProvider, type BottomSheetModal } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
-  FlatList,
   Platform,
-  Pressable,
-  RefreshControl,
   SafeAreaView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from 'react-native';
 
-// Cap Dynamic Type scaling globally so layouts don't break at the largest a11y
-// sizes while still respecting user preferences up to ~1.4x.
-const TextAny = Text as unknown as { defaultProps?: Record<string, unknown> };
-TextAny.defaultProps = TextAny.defaultProps ?? {};
-TextAny.defaultProps.maxFontSizeMultiplier = 1.4;
-const TextInputAny = TextInput as unknown as { defaultProps?: Record<string, unknown> };
-TextInputAny.defaultProps = TextInputAny.defaultProps ?? {};
-TextInputAny.defaultProps.maxFontSizeMultiplier = 1.4;
+// NOTE: Dynamic Type is intentionally uncapped. The old Text.defaultProps
+// maxFontSizeMultiplier hack silently stopped working on React 19 (function
+// components ignore defaultProps), so text scales freely at accessibility
+// sizes; layouts must tolerate it.
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import MapView, { Marker, type Region } from 'react-native-maps';
-import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
-import Svg, {
-  Circle,
-  Defs,
-  LinearGradient as SvgLinearGradient,
-  Path,
-  Stop,
-} from 'react-native-svg';
+import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { AboutSheet } from './components/AboutSheet';
-import { EmuMark, EmuMascot } from './components/EmuMascot';
-import { IntentStrip, INTENTS } from './components/IntentStrip';
-import { LocationBanner } from './components/LocationBanner';
-import { PermissionGate } from './components/PermissionGate';
+import { CrisisSheet } from './components/CrisisSheet';
 import { PostcodeInput } from './components/PostcodeInput';
-import { ServiceCard } from './components/ServiceCard';
 import { ServiceDetailSheet, type ServiceDetailHandle } from './components/ServiceDetail';
-import { SkeletonList } from './components/SkeletonList';
 import { useServices } from './hooks/useServices';
 import { useUserLocation } from './hooks/useUserLocation';
-import { catColor } from './lib/constants';
-import { distanceMetres } from './lib/geo';
+import { needByKey, type Need } from './lib/needs';
 import { theme } from './lib/theme';
 import type { Service } from './lib/types';
+import { BrowseScreen } from './screens/BrowseScreen';
+import { HomeScreen } from './screens/HomeScreen';
+import { ResultsScreen } from './screens/ResultsScreen';
 
-const INITIAL_REGION: Region = {
-  latitude: -28.5,
-  longitude: 134,
-  latitudeDelta: 40,
-  longitudeDelta: 40,
-};
-const NEAR_REGION_DELTA = 1.0;
-const MAX_MARKERS = 400;
-const LIST_LIMIT = 200;
-const ENTRANCE_COUNT = 12;
-
-type ViewMode = 'list' | 'map';
-
-function timeGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 5) return "You're up late";
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good arvo';
-  return 'Good evening';
-}
+type Screen =
+  | { name: 'home' }
+  | { name: 'results'; needKey: string }
+  | { name: 'browse'; category: string | null };
 
 export default function App() {
   return (
@@ -83,24 +46,30 @@ export default function App() {
 }
 
 function AppShell() {
-  const { services, isLoading, isSyncing, syncProgress, error, refresh } = useServices();
+  const { services, isLoading, isSyncing, syncProgress, syncTotal, lastSynced, error, refresh } =
+    useServices();
   const location = useUserLocation();
 
-  const [permissionResolved, setPermissionResolved] = useState(false);
-  const [searchInput, setSearchInput] = useState('');
-  const [query, setQuery] = useState('');
-  const [activeIntent, setActiveIntent] = useState<string | null>(null);
+  const [stack, setStack] = useState<Screen[]>([{ name: 'home' }]);
+  const screen = stack[stack.length - 1];
+  // One "show services from anywhere" choice holds for the whole session;
+  // re-asking on every need tap punishes the person who already said no.
+  const [locationSkipped, setLocationSkipped] = useState(false);
 
-  useEffect(() => {
-    const t = setTimeout(() => setQuery(searchInput.trim()), 250);
-    return () => clearTimeout(t);
-  }, [searchInput]);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selected, setSelected] = useState<Service | null>(null);
   const [selectedDistance, setSelectedDistance] = useState<number | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [crisisOpen, setCrisisOpen] = useState(false);
   const [postcodeOpen, setPostcodeOpen] = useState(false);
   const detailRef = useRef<ServiceDetailHandle>(null);
+
+  const push = useCallback((next: Screen) => {
+    setStack((s) => [...s, next]);
+  }, []);
+
+  const pop = useCallback(() => {
+    setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
+  }, []);
 
   const openDetail = useCallback((service: Service, distance: number | null) => {
     setSelected(service);
@@ -113,107 +82,7 @@ function AppShell() {
     setSelectedDistance(null);
   }, []);
 
-  const showPermissionGate =
-    !permissionResolved && location.status === 'idle' && !isLoading;
-  const isHydrating = location.status === 'hydrating';
-
-  const intentCategory = useMemo(
-    () => INTENTS.find((i) => i.key === activeIntent)?.category ?? null,
-    [activeIntent]
-  );
-
-  const filtered = useMemo(() => {
-    const needle = query.toLowerCase();
-    return services.filter((s) => {
-      if (intentCategory && s.category !== intentCategory) return false;
-      if (!needle) return true;
-      return (
-        (s.name || '').toLowerCase().includes(needle) ||
-        (s.description || '').toLowerCase().includes(needle) ||
-        (s.suburb || '').toLowerCase().includes(needle) ||
-        (s.address || '').toLowerCase().includes(needle) ||
-        (s.postcode || '').toLowerCase().includes(needle)
-      );
-    });
-  }, [services, query, intentCategory]);
-
-  const ranked = useMemo(() => {
-    if (!location.coords) return filtered.map((s) => ({ service: s, distance: null }));
-    const { latitude, longitude } = location.coords;
-    return filtered
-      .map((s) => {
-        const d =
-          s.latitude != null && s.longitude != null
-            ? distanceMetres(latitude, longitude, s.latitude, s.longitude)
-            : Number.POSITIVE_INFINITY;
-        return { service: s, distance: Number.isFinite(d) ? d : null };
-      })
-      .sort((a, b) => {
-        const da = a.distance ?? Number.POSITIVE_INFINITY;
-        const db = b.distance ?? Number.POSITIVE_INFINITY;
-        return da - db;
-      });
-  }, [filtered, location.coords]);
-
-  const mapMarkers = useMemo(() => {
-    const out: Service[] = [];
-    for (const s of filtered) {
-      if (s.latitude == null || s.longitude == null) continue;
-      out.push(s);
-      if (out.length >= MAX_MARKERS) break;
-    }
-    return out;
-  }, [filtered]);
-
-  const mapRegion = useMemo<Region>(() => {
-    if (location.coords) {
-      return {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: NEAR_REGION_DELTA,
-        longitudeDelta: NEAR_REGION_DELTA,
-      };
-    }
-    return INITIAL_REGION;
-  }, [location.coords]);
-
-  if (isHydrating) {
-    return (
-      <SafeAreaView style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
-        <StatusBar style="dark" />
-        <ActivityIndicator color={theme.colors.primary} />
-      </SafeAreaView>
-    );
-  }
-
-  if (showPermissionGate) {
-    return (
-      <>
-        <StatusBar style="dark" />
-        <PermissionGate
-          isRequesting={location.status === 'requesting'}
-          onAllow={async () => {
-            await location.request();
-            setPermissionResolved(true);
-          }}
-          onPostcode={() => setPostcodeOpen(true)}
-          onSkip={() => setPermissionResolved(true)}
-        />
-        <PostcodeInput
-          visible={postcodeOpen}
-          initialValue={location.postcode ?? ''}
-          onCancel={() => setPostcodeOpen(false)}
-          onConfirm={(entry) => {
-            location.setPostcode(entry.postcode);
-            setPostcodeOpen(false);
-            setPermissionResolved(true);
-          }}
-        />
-      </>
-    );
-  }
-
-  const onLocationBannerPress = () => {
+  const onLocationPress = useCallback(() => {
     showLocationActionSheet({
       source: location.source,
       onUseGps: () => {
@@ -224,127 +93,90 @@ function AppShell() {
         void location.clear();
       },
     });
-  };
+  }, [location]);
 
-  const headerTitle =
-    location.source === 'gps' ? 'Near you'
-    : location.source === 'postcode' ? `Near ${location.postcode}`
-    : 'All services';
-  const subtitle = activeIntent
-    ? INTENTS.find((i) => i.key === activeIntent)?.label
-    : null;
+  if (location.status === 'hydrating') {
+    return (
+      <SafeAreaView style={[styles.root, styles.center]}>
+        <StatusBar style="dark" />
+        <ActivityIndicator color={theme.colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  const screenKey =
+    screen.name === 'results'
+      ? `results:${screen.needKey}`
+      : screen.name === 'browse'
+      ? `browse:${screen.category ?? 'all'}`
+      : 'home';
 
   return (
     <View style={styles.root}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
 
-      <Header
-        query={searchInput}
-        onQuery={setSearchInput}
-        location={location}
-        onLocationPress={onLocationBannerPress}
-        activeIntent={activeIntent}
-        onIntentChange={setActiveIntent}
-        count={filtered.length}
-        isSyncing={isSyncing}
-        syncProgress={syncProgress}
-        viewMode={viewMode}
-        onViewMode={setViewMode}
-        headerTitle={headerTitle}
-        subtitle={subtitle ?? null}
-        onInfoPress={() => setAboutOpen(true)}
-      />
-
-      {viewMode === 'map' ? (
-        <View style={styles.mapBody}>
-          <MapView
-            style={StyleSheet.absoluteFill}
-            initialRegion={mapRegion}
-            showsUserLocation={location.status === 'granted'}
-          >
-            {mapMarkers.map((s) => (
-              <Marker
-                key={s.id}
-                coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
-                pinColor={catColor(s.category)}
-                title={s.name}
-                description={s.suburb}
-                onPress={() => {
-                  void Haptics.selectionAsync();
-                  const dist =
-                    location.coords && s.latitude != null && s.longitude != null
-                      ? distanceMetres(
-                          location.coords.latitude,
-                          location.coords.longitude,
-                          s.latitude,
-                          s.longitude
-                        )
-                      : null;
-                  openDetail(s, dist);
-                }}
-              />
-            ))}
-          </MapView>
-          {filtered.length > MAX_MARKERS ? (
-            <View style={styles.zoomHint}>
-              <Ionicons name="information-circle" size={14} color="#fff" />
-              <Text style={styles.zoomHintText}>Showing first {MAX_MARKERS} of {filtered.length.toLocaleString()}, refine your search</Text>
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <FlatList
-          style={styles.listBody}
-          data={ranked.slice(0, LIST_LIMIT)}
-          keyExtractor={(item) => item.service.id}
-          renderItem={({ item, index }) => (
-            <Animated.View
-              entering={
-                index < ENTRANCE_COUNT
-                  ? FadeInDown.delay(index * 45).reduceMotion(ReduceMotion.System)
-                  : undefined
-              }
-            >
-              <ServiceCard
-                service={item.service}
-                distanceMeters={item.distance}
-                onPress={() => openDetail(item.service, item.distance)}
-              />
-            </Animated.View>
-          )}
-          ListEmptyComponent={
-            isLoading ? (
-              <SkeletonList />
-            ) : (
-              <EmptyState
-                hasError={!!error}
-                hasFilters={!!searchInput || !!activeIntent}
-                onClear={() => {
-                  setSearchInput('');
-                  setActiveIntent(null);
-                }}
-                onRetry={refresh}
-              />
-            )
-          }
-          ListFooterComponent={
-            ranked.length > LIST_LIMIT ? (
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>
-                  Showing first {LIST_LIMIT} of {ranked.length.toLocaleString()}, refine your search.
-                </Text>
-              </View>
-            ) : (
-              <View style={{ height: 24 }} />
-            )
-          }
-          refreshControl={<RefreshControl refreshing={isSyncing} onRefresh={refresh} tintColor={theme.colors.primary} />}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        />
-      )}
+      <Animated.View
+        key={screenKey}
+        style={styles.screen}
+        entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)}
+      >
+        {screen.name === 'home' ? (
+          <HomeScreen
+            location={location}
+            isSyncing={isSyncing}
+            syncProgress={syncProgress}
+            syncTotal={syncTotal}
+            serviceCount={services.length}
+            error={error}
+            lastSynced={lastSynced}
+            onPickNeed={(need: Need) => {
+              void Haptics.selectionAsync();
+              push({ name: 'results', needKey: need.key });
+            }}
+            onSomethingElse={() => push({ name: 'browse', category: null })}
+            onLocationPress={onLocationPress}
+            onInfoPress={() => setAboutOpen(true)}
+            onCrisisPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setCrisisOpen(true);
+            }}
+          />
+        ) : screen.name === 'results' ? (
+          <ResultsScreen
+            need={needByKey(screen.needKey) ?? fallbackNeed(screen.needKey)}
+            services={services}
+            isLoading={isLoading}
+            isSyncing={isSyncing}
+            syncProgress={syncProgress}
+            syncTotal={syncTotal}
+            error={error}
+            location={location}
+            skipped={locationSkipped}
+            onSkipChange={setLocationSkipped}
+            onBack={pop}
+            onOpenDetail={openDetail}
+            onSeeAll={() => push({ name: 'browse', category: screen.needKey })}
+            onBrowseAll={() => push({ name: 'browse', category: null })}
+            onCrisisPress={() => setCrisisOpen(true)}
+            onEnterPostcode={() => setPostcodeOpen(true)}
+            onRetry={() => void refresh()}
+          />
+        ) : (
+          <BrowseScreen
+            services={services}
+            isLoading={isLoading}
+            isSyncing={isSyncing}
+            error={error}
+            refresh={refresh}
+            location={location}
+            initialCategory={screen.category}
+            onBack={pop}
+            onOpenDetail={openDetail}
+            onLocationPress={onLocationPress}
+            onCrisisPress={() => setCrisisOpen(true)}
+          />
+        )}
+      </Animated.View>
 
       <ServiceDetailSheet
         ref={detailRef}
@@ -353,14 +185,16 @@ function AppShell() {
         onDismiss={handleDetailDismiss}
       />
 
+      <CrisisSheet visible={crisisOpen} onClose={() => setCrisisOpen(false)} />
+
       <AboutSheet
         visible={aboutOpen}
         onClose={() => setAboutOpen(false)}
         onChangeLocation={() => {
           setAboutOpen(false);
-          // Defer until the about sheet finishes dismissing so the postcode
-          // modal slides in cleanly on top.
-          setTimeout(() => onLocationBannerPress(), 250);
+          // Defer until the about sheet finishes dismissing so the next
+          // surface slides in cleanly on top.
+          setTimeout(() => onLocationPress(), 250);
         }}
       />
 
@@ -375,6 +209,19 @@ function AppShell() {
       />
     </View>
   );
+}
+
+// Safety net: the stack should only ever contain known need keys, but a bad
+// key must not crash the results screen.
+function fallbackNeed(key: string): Need {
+  return {
+    key,
+    label: 'Services',
+    sub: 'Support services',
+    icon: 'help-circle',
+    color: theme.colors.primary,
+    category: key,
+  };
 }
 
 function showLocationActionSheet(opts: {
@@ -417,399 +264,8 @@ function showLocationActionSheet(opts: {
   else onClear();
 }
 
-type HeaderProps = {
-  query: string;
-  onQuery: (q: string) => void;
-  location: ReturnType<typeof useUserLocation>;
-  onLocationPress: () => void;
-  activeIntent: string | null;
-  onIntentChange: (k: string | null) => void;
-  count: number;
-  isSyncing: boolean;
-  syncProgress: number;
-  viewMode: ViewMode;
-  onViewMode: (m: ViewMode) => void;
-  headerTitle: string;
-  subtitle: string | null;
-  onInfoPress: () => void;
-};
-
-function Header({
-  query,
-  onQuery,
-  location,
-  onLocationPress,
-  activeIntent,
-  onIntentChange,
-  count,
-  isSyncing,
-  syncProgress,
-  viewMode,
-  onViewMode,
-  headerTitle,
-  subtitle,
-  onInfoPress,
-}: HeaderProps) {
-  return (
-    <View style={styles.headerContainer}>
-      <SafeAreaView style={styles.heroSafe}>
-        <View style={styles.hero}>
-          <Svg
-            style={StyleSheet.absoluteFill}
-            viewBox="0 0 375 168"
-            preserveAspectRatio="none"
-          >
-            <Defs>
-              <SvgLinearGradient id="heroGrad" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor={theme.colors.primaryDeep} />
-                <Stop offset="1" stopColor={theme.colors.primary} />
-              </SvgLinearGradient>
-            </Defs>
-            {/* Cream base so the area under the wave matches the page */}
-            <Path d="M0 0 H375 V168 H0 Z" fill={theme.colors.bg} />
-            {/* Solid block ending in a soft double-curve, like rolling hills */}
-            <Path
-              d="M0 0 H375 V138 Q295 166 200 150 Q100 134 0 158 Z"
-              fill="url(#heroGrad)"
-            />
-            {/* Sun rings behind the emu */}
-            <Circle cx="318" cy="40" r="58" stroke="rgba(255,253,248,0.10)" strokeWidth="1.5" fill="none" />
-            <Circle cx="318" cy="40" r="40" stroke="rgba(255,253,248,0.12)" strokeWidth="1.5" strokeDasharray="3 7" fill="none" />
-            {/* Scattered dot-painting accents */}
-            <Circle cx="30" cy="104" r="3" fill="rgba(255,253,248,0.16)" />
-            <Circle cx="52" cy="118" r="2" fill="rgba(255,253,248,0.12)" />
-            <Circle cx="22" cy="130" r="2" fill="rgba(255,253,248,0.10)" />
-            <Circle cx="150" cy="22" r="2" fill="rgba(255,253,248,0.12)" />
-            <Circle cx="170" cy="34" r="3" fill="rgba(255,253,248,0.09)" />
-          </Svg>
-
-          <View style={styles.heroTopRow}>
-            <Text style={styles.heroWordmark}>aosi</Text>
-            {isSyncing ? (
-              <View style={styles.syncBadge}>
-                <ActivityIndicator size="small" color="#fff" />
-                <Text style={styles.syncText}>{syncProgress.toLocaleString()}</Text>
-              </View>
-            ) : (
-              <Pressable
-                onPress={() => {
-                  void Haptics.selectionAsync();
-                  onInfoPress();
-                }}
-                hitSlop={12}
-                style={styles.infoBtn}
-                accessibilityRole="button"
-                accessibilityLabel="About aosi"
-                accessibilityHint="Opens information, crisis lines, and source links"
-              >
-                <Ionicons name="information-circle-outline" size={22} color="#FFFDF8" />
-              </Pressable>
-            )}
-          </View>
-
-          <Text style={styles.heroGreeting}>{timeGreeting()}</Text>
-          <Text style={styles.heroTitle}>Find support{'\n'}near you</Text>
-
-          <View style={styles.heroEmu}>
-            <EmuMark size={44} />
-          </View>
-        </View>
-      </SafeAreaView>
-
-      <View style={styles.searchWrap}>
-        <Ionicons name="search" size={18} color={theme.colors.textTertiary} />
-        <TextInput
-          value={query}
-          onChangeText={onQuery}
-          placeholder="Search services, suburb, postcode"
-          placeholderTextColor={theme.colors.textTertiary}
-          style={styles.searchInput}
-          autoCorrect={false}
-          autoCapitalize="none"
-          clearButtonMode="while-editing"
-        />
-      </View>
-
-      <LocationBanner
-        source={location.source}
-        placeLabel={location.placeLabel}
-        postcode={location.postcode}
-        onPress={onLocationPress}
-      />
-
-      <IntentStrip active={activeIntent} onChange={onIntentChange} />
-
-      <View style={styles.sectionHead}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.sectionTitle}>{headerTitle}</Text>
-          <Text style={styles.sectionSub}>
-            {count.toLocaleString()} {count === 1 ? 'service' : 'services'}
-            {subtitle ? ` · ${subtitle}` : ''}
-          </Text>
-        </View>
-        <View style={styles.viewToggle}>
-          <ToggleBtn
-            icon="list"
-            label="List"
-            active={viewMode === 'list'}
-            onPress={() => {
-              void Haptics.selectionAsync();
-              onViewMode('list');
-            }}
-          />
-          <ToggleBtn
-            icon="map"
-            label="Map"
-            active={viewMode === 'map'}
-            onPress={() => {
-              void Haptics.selectionAsync();
-              onViewMode('map');
-            }}
-          />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function ToggleBtn({
-  icon,
-  label,
-  active,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.toggleBtn, active && styles.toggleBtnActive, pressed && { opacity: 0.7 }]}
-      accessibilityRole="button"
-      accessibilityLabel={`${label} view`}
-      accessibilityState={{ selected: active }}
-    >
-      <Ionicons name={icon} size={14} color={active ? '#fff' : theme.colors.textSecondary} />
-      <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function EmptyState({
-  hasError,
-  hasFilters,
-  onClear,
-  onRetry,
-}: {
-  hasError: boolean;
-  hasFilters: boolean;
-  onClear: () => void;
-  onRetry: () => void;
-}) {
-  return (
-    <View style={styles.empty}>
-      <View style={styles.emptyMascot}>
-        <Svg width={180} height={180} style={StyleSheet.absoluteFill} viewBox="0 0 180 180">
-          <Circle
-            cx="90"
-            cy="90"
-            r="86"
-            stroke={theme.colors.accent}
-            strokeOpacity={0.45}
-            strokeWidth="2"
-            strokeDasharray="2 10"
-            fill="none"
-          />
-        </Svg>
-        <EmuMascot size={140} variant={hasError ? 'concerned' : 'searching'} />
-      </View>
-      <Text style={styles.emptyTitle}>
-        {hasError ? "Couldn't load services" : hasFilters ? 'Nothing here yet' : 'No services'}
-      </Text>
-      <Text style={styles.emptyBody}>
-        {hasError
-          ? 'Check your connection and try again.'
-          : hasFilters
-          ? 'No worries. Try a different word, or clear the filters and start fresh.'
-          : 'Pull down to refresh.'}
-      </Text>
-      {hasError ? (
-        <Pressable style={styles.emptyBtn} onPress={onRetry}>
-          <Text style={styles.emptyBtnText}>Retry</Text>
-        </Pressable>
-      ) : hasFilters ? (
-        <Pressable style={styles.emptyBtn} onPress={onClear}>
-          <Text style={styles.emptyBtnText}>Clear filters</Text>
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.bg },
-
-  heroSafe: { backgroundColor: theme.colors.primaryDeep },
-  hero: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xs,
-    paddingBottom: 42,
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: theme.spacing.sm,
-  },
-  heroWordmark: {
-    ...theme.type.headline,
-    color: 'rgba(255,253,248,0.92)',
-    letterSpacing: 0.5,
-  },
-  heroGreeting: {
-    ...theme.type.subhead,
-    color: 'rgba(255,253,248,0.78)',
-    marginBottom: 2,
-  },
-  heroTitle: {
-    ...theme.type.title1,
-    fontSize: 30,
-    lineHeight: 34,
-    color: '#FFFDF8',
-    maxWidth: '70%',
-  },
-  heroEmu: {
-    position: 'absolute',
-    right: theme.spacing.lg,
-    top: 48,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.cream,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...theme.shadowLifted,
-  },
-  syncBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(255,253,248,0.18)',
-    borderRadius: theme.radius.pill,
-  },
-  infoBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,253,248,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  syncText: { ...theme.type.caption, color: '#FFFDF8' },
-
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: theme.colors.surface,
-    marginHorizontal: theme.spacing.lg,
-    marginTop: -26,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 13,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadowLifted,
-  },
-  searchInput: { flex: 1, ...theme.type.callout, color: theme.colors.text, padding: 0 },
-
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-    gap: theme.spacing.md,
-  },
-  sectionTitle: { ...theme.type.title3, color: theme.colors.text },
-  sectionSub: { ...theme.type.footnote, color: theme.colors.textSecondary, marginTop: 2 },
-
-  viewToggle: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 3,
-    gap: 2,
-  },
-  toggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radius.pill,
-  },
-  toggleBtnActive: { backgroundColor: theme.colors.primary },
-  toggleLabel: { ...theme.type.caption, color: theme.colors.textSecondary },
-  toggleLabelActive: { color: '#fff' },
-
-  headerContainer: {
-    backgroundColor: theme.colors.bg,
-    paddingBottom: theme.spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.colors.borderStrong,
-  },
-  mapBody: { flex: 1, position: 'relative' },
-  listBody: { flex: 1 },
-  listContent: { paddingTop: theme.spacing.sm, paddingBottom: 32 },
-  zoomHint: {
-    position: 'absolute',
-    top: 16,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(43,38,32,0.88)',
-    borderRadius: theme.radius.pill,
-    ...theme.shadowLifted,
-  },
-  zoomHintText: { ...theme.type.caption, color: '#fff' },
-
-  empty: { padding: theme.spacing.xxxl, alignItems: 'center' },
-  emptyMascot: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: theme.colors.cream,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  emptyTitle: { ...theme.type.title3, color: theme.colors.text, marginBottom: 4 },
-  emptyBody: {
-    ...theme.type.subhead,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  emptyBtn: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: theme.radius.pill,
-  },
-  emptyBtnText: { ...theme.type.callout, color: '#fff', fontWeight: '600' },
-
-  footer: { padding: theme.spacing.lg, alignItems: 'center' },
-  footerText: { ...theme.type.footnote, color: theme.colors.textSecondary, textAlign: 'center' },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  screen: { flex: 1 },
 });
